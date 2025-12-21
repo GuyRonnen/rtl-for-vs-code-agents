@@ -27,7 +27,7 @@
         fontFamily: '"Segoe UI", "Arial Hebrew", "David", "Miriam", "Tahoma", "Arial", sans-serif',
         fontSize: '14px',
         lineHeight: '1.6',
-        
+
         // Selectors for chat content (add more as needed for different agents)
         chatSelectors: [
             '.chat-markdown-part.rendered-markdown',
@@ -35,7 +35,15 @@
             '.rendered-markdown',
             '.V.D'
         ],
-        
+
+        // Selectors for input boxes
+        inputSelectors: [
+            // Claude Code input box
+            'div[contenteditable="plaintext-only"][role="textbox"][aria-label="Message input"]',
+            // Copilot input box
+            '.view-line'
+        ],
+
         // How often to check for new content (ms)
         checkInterval: 500
     };
@@ -166,6 +174,63 @@
     }
 
     /**
+     * Apply RTL styling to input boxes
+     */
+    function applyInputRTL(element) {
+        element.style.direction = 'rtl';
+        element.style.textAlign = 'right';
+        element.style.fontFamily = CONFIG.fontFamily;
+        element.setAttribute('data-rtl-input', 'true');
+    }
+
+    /**
+     * Remove RTL styling from input boxes
+     */
+    function removeInputRTL(element) {
+        element.style.direction = 'ltr';
+        element.style.textAlign = 'left';
+        element.removeAttribute('data-rtl-input');
+    }
+
+    /**
+     * Process input boxes
+     */
+    function processInputs() {
+        const selector = CONFIG.inputSelectors.join(', ');
+        const inputs = document.querySelectorAll(selector);
+
+        inputs.forEach(input => {
+            // Get the current text content
+            const text = input.textContent || input.innerText || '';
+            const hasRTL = containsRTL(text);
+            const wasRTL = input.getAttribute('data-rtl-input') === 'true';
+
+            if (hasRTL && !wasRTL) {
+                applyInputRTL(input);
+            } else if (!hasRTL && wasRTL) {
+                removeInputRTL(input);
+            }
+
+            // Add event listener for real-time changes if not already added
+            if (!input.hasAttribute('data-rtl-listener')) {
+                input.setAttribute('data-rtl-listener', 'true');
+
+                // Listen for input events
+                input.addEventListener('input', function() {
+                    const currentText = this.textContent || this.innerText || '';
+                    const needsRTL = containsRTL(currentText);
+
+                    if (needsRTL) {
+                        applyInputRTL(this);
+                    } else {
+                        removeInputRTL(this);
+                    }
+                });
+            }
+        });
+    }
+
+    /**
      * Process all chat elements
      */
     function processElements() {
@@ -182,6 +247,9 @@
                 removeRTL(element);
             }
         });
+
+        // Also process input boxes
+        processInputs();
     }
 
     /**

@@ -10,7 +10,8 @@ Right-to-Left (RTL) support for AI chat agents in Visual Studio Code.
 - ✅ Supports Hebrew, Arabic, Persian, Urdu, and other RTL languages
 - ✅ Code blocks remain LTR (left-to-right) - essential for readability
 - ✅ Bidirectional text support (mixed RTL + English)
-- ✅ Works with GitHub Copilot Chat and other AI chat extensions
+- ✅ Works with GitHub Copilot Chat, Claude Code, and other AI chat extensions
+- ✅ Input box RTL support - automatically switches direction as you type
 - ✅ Auto-applies to dynamically loaded content
 
 ## Preview
@@ -19,7 +20,35 @@ Right-to-Left (RTL) support for AI chat agents in Visual Studio Code.
 
 ## Installation
 
-### Step 1: Install the Extension
+### Quick Install (Recommended)
+
+The easiest way to install RTL support is using the automated installer scripts:
+
+**Windows:**
+```powershell
+.\install.ps1
+```
+
+**Mac/Linux:**
+```bash
+./install.sh
+```
+
+The installer will:
+- Guide you through installing the "Custom CSS and JS Loader" extension
+- Create the necessary folders automatically
+- Copy the RTL script to the correct location
+- Update your VS Code settings.json
+- Optionally inject RTL support into Claude Code (with automatic backup)
+- Restart VS Code when complete
+
+**That's it!** RTL support will be active in all AI chat agents.
+
+### Manual Installation
+
+If you prefer to install manually or the automated script doesn't work:
+
+#### Step 1: Install the Extension
 
 Install **"Custom CSS and JS Loader"** from the VS Code Marketplace:
 
@@ -28,7 +57,7 @@ Install **"Custom CSS and JS Loader"** from the VS Code Marketplace:
 3. Search for "Custom CSS and JS Loader"
 4. Install the extension by **be5invis**
 
-### Step 2: Save the Script
+#### Step 2: Save the Script
 
 1. Create a new folder, for example:
    - Windows: `C:\Users\YourName\vscode-custom\`
@@ -36,7 +65,7 @@ Install **"Custom CSS and JS Loader"** from the VS Code Marketplace:
 
 2. Download and save `rtl-for-vscode-agents.js` to that folder
 
-### Step 3: Configure VS Code
+#### Step 3: Configure VS Code
 
 1. Open settings.json:
    - Press `Ctrl+Shift+P`
@@ -63,12 +92,80 @@ Install **"Custom CSS and JS Loader"** from the VS Code Marketplace:
 }
 ```
 
-### Step 4: Enable
+#### Step 4: Enable
 
 1. Press `Ctrl+Shift+P`
 2. Type "Enable Custom CSS and JS"
 3. Select the command
 4. VS Code will ask to restart - confirm
+
+## Additional Setup for Claude Code
+
+The above installation works for **Copilot Chat** and most agents. For **Claude Code**, you need one additional step because it runs in an isolated webview.
+
+### Automated Injection (Recommended)
+
+The installer scripts automatically handle Claude Code setup. When you run `install.ps1` or `install.sh`, you'll be prompted whether to inject RTL support into Claude Code. If you choose "yes", the script will:
+
+- Locate your Claude Code extension folder
+- Create a backup of the original `index.js`
+- Inject the RTL script automatically
+- Restore functionality after Claude Code updates
+
+### Manual Injection
+
+If you installed manually or prefer to do it yourself:
+
+1. **Close VS Code completely**
+
+2. **Locate your Claude Code extension folder:**
+   - Windows: `%USERPROFILE%\.vscode\extensions\anthropic.claude-code-*\webview\`
+   - Mac/Linux: `~/.vscode/extensions/anthropic.claude-code-*/webview/`
+
+3. **Backup the original file:**
+   ```bash
+   cd webview
+   cp index.js index.js.backup
+   ```
+
+4. **Inject the RTL script:**
+
+   **Windows (PowerShell):**
+   ```powershell
+   Get-Content path\to\claude-code-rtl-simple.js | Add-Content index.js
+   ```
+
+   **Mac/Linux:**
+   ```bash
+   cat path/to/claude-code-rtl-simple.js >> index.js
+   ```
+
+   **Or manually:**
+   - Open `index.js` in a text editor
+   - Scroll to the very end
+   - Paste the entire contents of `claude-code-rtl-simple.js`
+   - Save
+
+5. **Restart VS Code**
+
+**That's it!** RTL support will now work automatically in Claude Code.
+
+**Important Notes:**
+- After updating Claude Code extension, you'll need to re-inject the script
+- To restore the original: `mv index.js.backup index.js`
+
+### Console Injection (Temporary - Per Session)
+
+If you prefer not to modify extension files:
+
+1. Open Claude Code chat
+2. Open DevTools: `Help → Toggle Developer Tools`
+3. **Important:** In the Console dropdown (top-left), select the Claude Code webview context (look for "Electron isolated Context")
+4. Copy the entire contents of `claude-code-rtl-simple.js`
+5. Paste into the console and press Enter
+6. You should see: `✅ RTL for Claude Code: Active`
+
+**Note:** This method requires re-running the script each time you restart VS Code.
 
 ## Important Notes
 
@@ -171,7 +268,8 @@ Persian and Urdu are covered by the Arabic ranges.
 ## Supported AI Agents
 
 Currently tested with:
-- GitHub Copilot Chat
+- ✅ GitHub Copilot Chat
+- ✅ Claude Code (requires additional setup - see above)
 
 Should also work with other AI chat extensions that use similar UI patterns. If you find an extension that doesn't work, please open an issue with the CSS selector information.
 

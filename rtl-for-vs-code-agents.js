@@ -32,7 +32,8 @@
         chatSelectors: [
             '.chat-markdown-part.rendered-markdown',
             '.chat-markdown-part',
-            '.rendered-markdown'
+            '.rendered-markdown',
+            '.V.D'
         ],
         
         // How often to check for new content (ms)

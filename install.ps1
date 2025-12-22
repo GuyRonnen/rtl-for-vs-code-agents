@@ -49,8 +49,58 @@ if ($ClaudeExtension) {
 
 Write-Host ""
 
-# 2. Set up Custom CSS and JS Loader
-Write-Host "Step 2: Configuring Custom CSS and JS Loader..." -ForegroundColor Yellow
+# 2. Find Google Antigravity
+Write-Host "Step 2: Locating Google Antigravity..." -ForegroundColor Yellow
+$AntigravityPath = "$env:LOCALAPPDATA\Programs\Antigravity"
+
+if (Test-Path $AntigravityPath) {
+    $ChatJsPath = Join-Path $AntigravityPath "resources\app\extensions\antigravity\out\media\chat.js"
+
+    Write-Host "   Found: Antigravity" -ForegroundColor Green
+
+    # Ask user if they want to inject into Antigravity
+    $InjectAntigravity = Read-Host "`nDo you want to inject RTL support into Antigravity? (y/n)"
+
+    if ($InjectAntigravity -eq 'y' -or $InjectAntigravity -eq 'Y') {
+        if (Test-Path $ChatJsPath) {
+            # Backup
+            $BackupPath = "$ChatJsPath.backup"
+            if (-not (Test-Path $BackupPath)) {
+                Copy-Item $ChatJsPath $BackupPath
+                Write-Host "   Backup created: chat.js.backup" -ForegroundColor Green
+            } else {
+                Write-Host "   Backup already exists" -ForegroundColor Yellow
+            }
+
+            # Read the JS file
+            $JsContent = Get-Content $ChatJsPath -Raw
+
+            # Read RTL script (use the simple version for direct injection)
+            $RtlScript = Get-Content (Join-Path $ScriptDir "rtl-antigravity-simple.js") -Raw
+
+            # Check if already injected
+            if ($JsContent -match "RTL Support for Google Antigravity") {
+                Write-Host "   RTL script already injected!" -ForegroundColor Yellow
+            } else {
+                # Append the script to the end of chat.js
+                $JsContent += "`n`n// RTL Support for Google Antigravity`n"
+                $JsContent += $RtlScript
+                Set-Content -Path $ChatJsPath -Value $JsContent -NoNewline
+                Write-Host "   RTL script injected successfully!" -ForegroundColor Green
+            }
+        } else {
+            Write-Host "   Error: chat.js not found" -ForegroundColor Red
+        }
+    }
+} else {
+    Write-Host "   Google Antigravity not found" -ForegroundColor Yellow
+    Write-Host "   Skipping Antigravity injection" -ForegroundColor Yellow
+}
+
+Write-Host ""
+
+# 3. Set up Custom CSS and JS Loader
+Write-Host "Step 3: Configuring Custom CSS and JS Loader..." -ForegroundColor Yellow
 
 # Find settings.json
 $SettingsPath = "$env:APPDATA\Code\User\settings.json"
@@ -117,7 +167,7 @@ Write-Host "1. Install 'Custom CSS and JS Loader' extension if you haven't alrea
 Write-Host "2. Press Ctrl+Shift+P and run 'Enable Custom CSS and JS'" -ForegroundColor White
 Write-Host "3. Restart VS Code" -ForegroundColor White
 Write-Host ""
-Write-Host "RTL support will now work in Copilot and Claude Code!" -ForegroundColor Green
+Write-Host "RTL support will now work in Copilot, Claude Code, and Antigravity!" -ForegroundColor Green
 Write-Host ""
 
 # Ask if user wants to open VS Code now

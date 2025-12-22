@@ -10,7 +10,7 @@ Right-to-Left (RTL) support for AI chat agents in Visual Studio Code.
 - ✅ Supports Hebrew, Arabic, Persian, Urdu, and other RTL languages
 - ✅ Code blocks remain LTR (left-to-right) - essential for readability
 - ✅ Bidirectional text support (mixed RTL + English)
-- ✅ Works with GitHub Copilot Chat, Claude Code, and other AI chat extensions
+- ✅ Works with GitHub Copilot Chat, Claude Code, Google Antigravity, and other AI chat extensions
 - ✅ Input box RTL support - automatically switches direction as you type
 - ✅ Auto-applies to dynamically loaded content
 
@@ -40,9 +40,30 @@ The installer will:
 - Copy the RTL script to the correct location
 - Update your VS Code settings.json
 - Optionally inject RTL support into Claude Code (with automatic backup)
+- Optionally inject RTL support into Google Antigravity (with automatic backup)
 - Restart VS Code when complete
 
 **That's it!** RTL support will be active in all AI chat agents.
+
+### Uninstalling
+
+To remove RTL support and restore original files:
+
+**Windows:**
+```powershell
+.\uninstall.ps1
+```
+
+The uninstaller will:
+- Restore original `index.js` in Claude Code (from backup)
+- Restore original `chat.js` in Antigravity (from backup)
+- Optionally remove the RTL script from VS Code settings.json
+- Show a summary of restored files
+
+**Manual Uninstall:**
+1. Claude Code: `mv %USERPROFILE%\.vscode\extensions\anthropic.claude-code-*\webview\index.js.backup index.js`
+2. Antigravity: `mv %LOCALAPPDATA%\Programs\Antigravity\resources\app\extensions\antigravity\out\media\chat.js.backup chat.js`
+3. Remove the RTL script path from `settings.json` under `vscode_custom_css.imports`
 
 ### Manual Installation
 
@@ -153,6 +174,7 @@ If you installed manually or prefer to do it yourself:
 **Important Notes:**
 - After updating Claude Code extension, you'll need to re-inject the script
 - To restore the original: `mv index.js.backup index.js`
+- If the script stops working after an update, the CSS selectors may have changed - please report this by opening an [issue on GitHub](https://github.com/YOUR_USERNAME/rtl-for-vs-code-agents/issues) or submit a PR with the updated selectors
 
 ### Console Injection (Temporary - Per Session)
 
@@ -166,6 +188,75 @@ If you prefer not to modify extension files:
 6. You should see: `✅ RTL for Claude Code: Active`
 
 **Note:** This method requires re-running the script each time you restart VS Code.
+
+## Additional Setup for Google Antigravity
+
+Google Antigravity is a VS Code-based editor with built-in AI agents. To enable RTL support in Antigravity:
+
+### Automated Injection (Recommended)
+
+Use the dedicated installer script:
+
+**Windows:**
+```powershell
+.\antigravity-install.ps1
+```
+
+Or use the combined installer which handles all tools:
+```powershell
+.\install.ps1
+```
+
+The installer will:
+- Locate your Antigravity installation
+- Create a backup of the original `chat.js`
+- Inject the RTL script automatically
+- Restart Antigravity when complete
+
+### Manual Injection
+
+If you prefer to do it manually:
+
+1. **Close Antigravity completely**
+
+2. **Locate the chat.js file:**
+   - Windows: `%LOCALAPPDATA%\Programs\Antigravity\resources\app\extensions\antigravity\out\media\chat.js`
+
+3. **Backup the original file:**
+   ```bash
+   cd "%LOCALAPPDATA%\Programs\Antigravity\resources\app\extensions\antigravity\out\media\"
+   copy chat.js chat.js.backup
+   ```
+
+4. **Inject the RTL script:**
+   - Open `chat.js` in a text editor
+   - Scroll to the very end of the file
+   - Add a new line and paste:
+
+   ```javascript
+   // RTL Support for Google Antigravity
+   [paste contents of rtl-antigravity-simple.js here]
+   ```
+
+5. **Save and restart Antigravity**
+
+**Important Notes:**
+- After updating Antigravity, you may need to re-inject the script
+- To restore the original: copy `chat.js.backup` back to `chat.js`
+- If the script stops working after an update, the CSS selectors may have changed - please report this by opening an [issue on GitHub](https://github.com/YOUR_USERNAME/rtl-for-vs-code-agents/issues) or submit a PR with the updated selectors
+
+### Console Injection (Temporary - Per Session)
+
+If manual injection doesn't work, you can inject directly into the console:
+
+1. Open Antigravity and start a chat with the agent
+2. Open DevTools: Right-click → Inspect
+3. In the Console dropdown (top), select **antigravity.agentPanel** context
+4. Copy the entire contents of `rtl-antigravity-simple.js`
+5. Paste into the console and press Enter
+6. You should see: `RTL Support for Google Antigravity - Active`
+
+**Note:** This method requires re-running the script each time you restart Antigravity.
 
 ## Important Notes
 
@@ -193,6 +284,11 @@ After each VS Code update, you'll need to re-enable Custom CSS:
 1. `Ctrl+Shift+P`
 2. "Reload Custom CSS and JS"
 3. Restart VS Code
+
+**Important:** If RTL stops working after a VS Code, Claude Code, or Antigravity update, the internal CSS selectors may have changed. In this case:
+- Try re-running the installation script first
+- If that doesn't work, please open an [issue on GitHub](https://github.com/YOUR_USERNAME/rtl-for-vs-code-agents/issues) with details about which tool was updated
+- Even better - if you can identify the new selectors using DevTools, submit a PR with the fix!
 
 ### 🔧 Manual Refresh
 
@@ -270,6 +366,7 @@ Persian and Urdu are covered by the Arabic ranges.
 Currently tested with:
 - ✅ GitHub Copilot Chat
 - ✅ Claude Code (requires additional setup - see above)
+- ✅ Google Antigravity (requires additional setup - see above)
 
 Should also work with other AI chat extensions that use similar UI patterns. If you find an extension that doesn't work, please open an issue with the CSS selector information.
 
@@ -291,6 +388,34 @@ Should also work with other AI chat extensions that use similar UI patterns. If 
 ### Code appears with RTL styling
 
 Code blocks should remain LTR. If code is affected, please open an issue.
+
+### RTL stopped working after an update
+
+If RTL support suddenly stops working after updating VS Code, Claude Code, or Antigravity:
+
+1. **First, try re-running the installation script:**
+   ```powershell
+   .\install.ps1
+   ```
+   This will re-inject the scripts with the current code.
+
+2. **Check if selectors have changed:**
+   - Open Developer Tools in the affected application
+   - Use the element inspector to examine chat messages
+   - Look for the CSS classes being used
+   - Compare with the selectors in the script
+
+3. **Report the issue:**
+   - If re-installation doesn't fix it, the internal structure likely changed
+   - Open an [issue on GitHub](https://github.com/YOUR_USERNAME/rtl-for-vs-code-agents/issues) with:
+     - Which application was updated (VS Code/Claude Code/Antigravity)
+     - The version number after the update
+     - Screenshots of the DevTools inspection if possible
+
+4. **Submit a fix:**
+   - If you identified the new selectors, please submit a PR!
+   - Update the relevant script file with the new CSS selectors
+   - This helps the entire community
 
 ### Finding CSS selectors for other extensions
 

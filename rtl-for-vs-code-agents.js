@@ -135,11 +135,11 @@
         element.style.fontFamily = CONFIG.fontFamily;
         element.setAttribute('data-rtl-applied', 'true');
 
-        // Apply to paragraphs
+        // Apply to paragraphs - check each child independently
         element.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6').forEach(el => {
-            // Check if this specific element should be RTL
-            const text = el.textContent.trim();
-            if (containsRTL(text)) {
+            // Check if this specific element starts with RTL
+            const firstText = getFirstTextContent(el);
+            if (containsRTL(firstText)) {
                 el.style.direction = 'rtl';
                 el.style.textAlign = 'right';
                 el.style.unicodeBidi = 'plaintext';
@@ -156,8 +156,8 @@
             }
         });
 
-        // Keep code blocks LTR
-        element.querySelectorAll('pre, code').forEach(el => {
+        // Keep code blocks LTR (including div.code for Copilot)
+        element.querySelectorAll('div.code, pre, code').forEach(el => {
             el.style.direction = 'ltr';
             el.style.textAlign = 'left';
             el.style.unicodeBidi = 'embed';
@@ -232,6 +232,56 @@
     }
 
     /**
+     * Ensure all code blocks are LTR
+     */
+    function ensureCodeBlocksLTR() {
+        // Force all code blocks to be LTR immediately
+        const codeBlocks = document.querySelectorAll('div.code, pre, code');
+        codeBlocks.forEach(block => {
+            block.style.direction = 'ltr';
+            block.style.textAlign = 'left';
+            block.style.unicodeBidi = 'embed';
+        });
+    }
+
+    /**
+     * Process individual child elements for RTL
+     * This handles cases where a message starts in English but has Hebrew paragraphs
+     */
+    function processChildrenForRTL(element) {
+        // Process paragraphs, headings, and list items
+        element.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6').forEach(el => {
+            // Skip if already processed and RTL
+            if (el.style.direction === 'rtl') {
+                return;
+            }
+
+            const firstText = getFirstTextContent(el);
+            if (containsRTL(firstText)) {
+                el.style.direction = 'rtl';
+                el.style.textAlign = 'right';
+                el.style.unicodeBidi = 'plaintext';
+                el.style.fontFamily = CONFIG.fontFamily;
+            }
+        });
+
+        // Process lists
+        element.querySelectorAll('ul, ol').forEach(el => {
+            // Skip if already processed and RTL
+            if (el.style.direction === 'rtl') {
+                return;
+            }
+
+            if (containsRTL(el.textContent)) {
+                el.style.direction = 'rtl';
+                el.style.textAlign = 'right';
+                el.style.paddingRight = '20px';
+                el.style.paddingLeft = '0';
+            }
+        });
+    }
+
+    /**
      * Process all chat elements
      */
     function processElements() {
@@ -246,11 +296,18 @@
                 applyRTL(element);
             } else if (!needsRTL && wasRTL) {
                 removeRTL(element);
+            } else if (!needsRTL && !wasRTL) {
+                // Even if parent is LTR, check children for Hebrew paragraphs
+                // This handles messages that start in English but have Hebrew content
+                processChildrenForRTL(element);
             }
         });
 
         // Also process input boxes
         processInputs();
+
+        // Ensure all code blocks are LTR (run after RTL processing)
+        ensureCodeBlocksLTR();
     }
 
     /**
@@ -260,32 +317,74 @@
         // Process existing elements
         processElements();
 
-        // Watch for new elements
+        // Watch for new elements and process them immediately
         const observer = new MutationObserver((mutations) => {
-            let shouldProcess = false;
-            
             mutations.forEach((mutation) => {
                 if (mutation.addedNodes.length > 0) {
-                    shouldProcess = true;
-                }
-                // Also check for content changes
-                if (mutation.type === 'characterData') {
-                    shouldProcess = true;
+                    mutation.addedNodes.forEach((node) => {
+                        if (node.nodeType === 1) { // Element node
+                            // Immediately handle code blocks
+                            if (node.tagName === 'PRE' || node.tagName === 'CODE' ||
+                                (node.classList && node.classList.contains('code'))) {
+                                node.style.direction = 'ltr';
+                                node.style.textAlign = 'left';
+                                node.style.unicodeBidi = 'embed';
+                            }
+
+                            // Check for code blocks inside the node
+                            const codeBlocks = node.querySelectorAll('div.code, pre, code');
+                            if (codeBlocks.length > 0) {
+                                codeBlocks.forEach(block => {
+                                    block.style.direction = 'ltr';
+                                    block.style.textAlign = 'left';
+                                    block.style.unicodeBidi = 'embed';
+                                });
+                            }
+
+                            // Immediately check if this node matches our chat selectors
+                            const selector = CONFIG.chatSelectors.join(', ');
+                            let chatElements = [];
+
+                            // Check if the node itself is a chat element
+                            if (node.matches && node.matches(selector)) {
+                                chatElements.push(node);
+                            }
+
+                            // Check for chat elements inside the node
+                            const childChatElements = node.querySelectorAll(selector);
+                            if (childChatElements.length > 0) {
+                                chatElements.push(...childChatElements);
+                            }
+
+                            // Process chat elements immediately - no debounce!
+                            chatElements.forEach(element => {
+                                const wasRTL = element.getAttribute('data-rtl-applied') === 'true';
+                                const needsRTL = shouldBeRTL(element);
+
+                                if (needsRTL && !wasRTL) {
+                                    applyRTL(element);
+                                } else if (!needsRTL && wasRTL) {
+                                    removeRTL(element);
+                                } else if (!needsRTL && !wasRTL) {
+                                    processChildrenForRTL(element);
+                                }
+                            });
+                        }
+                    });
                 }
             });
-
-            if (shouldProcess) {
-                // Debounce processing
-                clearTimeout(window._rtlProcessTimeout);
-                window._rtlProcessTimeout = setTimeout(processElements, 100);
-            }
         });
 
         observer.observe(document.body, {
             childList: true,
             subtree: true,
-            characterData: true
+            characterData: false // Not needed - childList catches everything
         });
+
+        // Process input boxes periodically (they don't trigger addedNodes)
+        setInterval(() => {
+            processInputs();
+        }, 200);
 
         console.log('✅ RTL for VS Code Agents: Initialized');
     }

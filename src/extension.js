@@ -143,7 +143,28 @@ function buildConfigBlock() {
     const config = getConfig();
     const yoloSeconds = Number(config.get('yoloCountdownSeconds', 5)) || 0;
     const userMessageBorder = config.get('userMessageBorder', true);
-    return `window.__RTL_CONFIG__ = ${JSON.stringify({ yoloDelayMs: yoloSeconds * 1000, userMessageBorder })};`;
+    // monacoRtlEnabled: lets the user disable RTL inside Monaco editor instances.
+    // In Cursor (and likely VS Code as well) right-aligning Hebrew/Arabic inside a regular
+    // code editor window doesn't look great and breaks editor behavior — the text caret
+    // doesn't move correctly through RTL text and text selection misbehaves. Since we
+    // can't fully fix that from a CSS/JS injection, we at least expose a toggle so users
+    // who hit the issue can turn Monaco RTL off (chat messages still get RTL).
+    const monacoRtlEnabled = config.get('monacoRtlEnabled', true);
+    return `window.__RTL_CONFIG__ = ${JSON.stringify({ yoloDelayMs: yoloSeconds * 1000, userMessageBorder, monacoRtlEnabled })};`;
+}
+
+// rtl-config.js is a separate small file that contains only `window.__RTL_CONFIG__`.
+// It exists because the Custom CSS and JS Loader (used for Cursor) inlines imported
+// scripts into workbench.html and does NOT execute buildConfigBlock() at load time.
+// This causes the plugin to not be able to read the setting on startup and work only with the initial default.
+// By writing the config to its own file and adding it to vscode_custom_css.imports
+// BEFORE the main script, the loader inlines both — and the main script can read
+// up-to-date settings from window.__RTL_CONFIG__ on every Disable→Enable cycle.
+const CONFIG_FILE = 'rtl-config.js';
+
+function writeConfigFile(extensionPath) {
+    const configPath = path.join(extensionPath, CONFIG_FILE);
+    fs.writeFileSync(configPath, buildConfigBlock(), 'utf8');
 }
 
 const PLAN_MARKER = 'RTL-Plan-Injection';
@@ -423,6 +444,11 @@ async function configureCustomCss(context, options = {}) {
     const { quiet = false } = options;
     const scriptPath = path.join(context.extensionPath, SCRIPT_FILE);
     const fileUrl = `file:///${scriptPath.replace(/\\/g, '/')}`;
+    const configPath = path.join(context.extensionPath, CONFIG_FILE);
+    const configUrl = `file:///${configPath.replace(/\\/g, '/')}`;
+
+    // Always write rtl-config.js with the latest settings (see comment on writeConfigFile)
+    writeConfigFile(context.extensionPath);
 
     const config = vscode.workspace.getConfiguration();
     const imports = config.get('vscode_custom_css.imports', []);
@@ -434,11 +460,22 @@ async function configureCustomCss(context, options = {}) {
         return;
     }
 
-    // Remove stale RTL entries (old versions, wrong paths) before adding current one
+    // Remove stale RTL entries (old versions, wrong paths) before adding current ones
     const cleanedImports = imports.filter(url =>
-        typeof url !== 'string' || !url.includes('rtl-for-vs-code-agents') || url === fileUrl
+        typeof url !== 'string' ||
+        (!url.includes('rtl-for-vs-code-agents') && !url.includes('rtl-config')) ||
+        url === fileUrl || url === configUrl
     );
 
+    // rtl-config.js MUST be loaded before the main script so window.__RTL_CONFIG__ is defined when it runs
+    if (!cleanedImports.includes(configUrl)) {
+        const mainIdx = cleanedImports.indexOf(fileUrl);
+        if (mainIdx >= 0) {
+            cleanedImports.splice(mainIdx, 0, configUrl);
+        } else {
+            cleanedImports.push(configUrl);
+        }
+    }
     if (!cleanedImports.includes(fileUrl)) {
         cleanedImports.push(fileUrl);
     }
@@ -907,7 +944,9 @@ async function activate(context) {
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration(e => {
             if (e.affectsConfiguration('rtlForVsCodeAgents.yoloCountdownSeconds') ||
-                e.affectsConfiguration('rtlForVsCodeAgents.userMessageBorder')) {
+                e.affectsConfiguration('rtlForVsCodeAgents.userMessageBorder') ||
+                e.affectsConfiguration('rtlForVsCodeAgents.monacoRtlEnabled')) {
+                writeConfigFile(context.extensionPath);
                 const updated = reinjectAll(context.extensionPath);
                 if (updated > 0) {
                     vscode.window.showInformationMessage(
@@ -925,6 +964,9 @@ async function activate(context) {
             }
         })
     );
+
+    // Keep rtl-config.js in sync with current Settings on every startup
+    writeConfigFile(context.extensionPath);
 
     // Auto-inject RTL into agent webviews
     checkAndInject(context, { quiet: false, interactive: true, notifyNoChanges: false });

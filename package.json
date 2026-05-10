@@ -67,6 +67,11 @@
           "maximum": 30,
           "markdownDescription": "YOLO mode countdown duration (seconds) before auto-approving tool calls.\n\n**0 = instant** (no progress bar).\n\n**Tip:** It's easier to change this by right-clicking the 💪 button directly — changes are instant and persistent (no reload needed). This setting is only used as the initial default on first install."
         },
+        "rtlForVsCodeAgents.monacoRtlEnabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Enable RTL support for Monaco Editor input boxes (e.g. Copilot chat input). Disable this if you see RTL applied to regular code editor windows.\n\n**Tip:** Changes take effect after running 'Disable Custom CSS and JS' → 'Enable Custom CSS and JS' → reload."
+        },
         "rtlForVsCodeAgents.autoCheckUpdates": {
           "type": "boolean",
           "default": true,

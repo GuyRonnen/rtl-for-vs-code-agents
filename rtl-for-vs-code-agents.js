@@ -31,6 +31,8 @@
 
         // Selectors for chat content (add more as needed for different agents)
         chatSelectors: [
+            // Cursor (Composer / Agent panel) — all leaf text nodes under .conversations
+            '.markdown-root > div',
             // Copilot
             '.chat-markdown-part.rendered-markdown',
             '.chat-markdown-part',
@@ -546,6 +548,11 @@
 
             /* Copilot / VS Code Chat — user message accent border (also dynamic) */
 
+            /* Cursor Composer — RTL user messages: flip flex direction so text aligns right */
+            .composer-human-message .justify-between {
+                direction: rtl !important;
+            }
+
             /* Bright scrollbar for chat panel */
             * {
                 scrollbar-color: rgba(255, 255, 255, 0.45) transparent !important;
@@ -878,6 +885,7 @@
      * Uses CSS class toggle on parent instead of inline styles to prevent flickering
      */
     function processMonacoInputs() {
+        if (!getMonacoRTLEnabled()) return;
         const viewLines = document.querySelectorAll('.view-line');
 
         viewLines.forEach(viewLine => {
@@ -903,8 +911,18 @@
     function processInputs() {
         const selector = CONFIG.inputSelectors.join(', ');
         const inputs = document.querySelectorAll(selector);
+        const monacoRtlOff = !getMonacoRTLEnabled();
 
         inputs.forEach(input => {
+            // When Monaco RTL is disabled, skip view-lines that live inside a regular code editor
+            // (monaco-mouse-cursor-text is the class on the code editor's view-lines container)
+            if (monacoRtlOff && input.classList && input.classList.contains('view-line') &&
+                input.closest('.monaco-mouse-cursor-text')) {
+                // If we previously applied RTL, undo it
+                if (input.getAttribute('data-rtl-input') === 'true') removeInputRTL(input);
+                return;
+            }
+
             // Get the current text content
             const text = input.textContent || input.innerText || '';
             const hasRTL = containsRTL(text);
@@ -957,6 +975,7 @@
     const YOLO_POLL_MS = 500;
     const BORDER_LS_KEY = 'rtl-user-msg-border';
     const INPUT_DIR_MODE_LS_KEY = 'rtl-input-dir-mode'; // 'uniform' (default) or 'per-line'
+    const MONACO_RTL_LS_KEY = 'rtl-monaco-enabled'; // true (default) or false
 
     // Seed localStorage from injected config (only if not already set by user)
     if (localStorage.getItem(YOLO_LS_KEY) === null) {
@@ -976,6 +995,12 @@
         const seed = (window.__RTL_CONFIG__ && window.__RTL_CONFIG__.inputDirMode)
             ? window.__RTL_CONFIG__.inputDirMode : 'uniform';
         localStorage.setItem(INPUT_DIR_MODE_LS_KEY, seed);
+    }
+    // Monaco RTL — always sync from __RTL_CONFIG__ so Settings change takes effect after Disable/Enable Custom CSS
+    if (window.__RTL_CONFIG__ && typeof window.__RTL_CONFIG__.monacoRtlEnabled === 'boolean') {
+        localStorage.setItem(MONACO_RTL_LS_KEY, String(window.__RTL_CONFIG__.monacoRtlEnabled));
+    } else if (localStorage.getItem(MONACO_RTL_LS_KEY) === null) {
+        localStorage.setItem(MONACO_RTL_LS_KEY, 'true');
     }
 
     /** Read YOLO delay dynamically — changes take effect on next poll without reload */
@@ -1001,6 +1026,21 @@
         localStorage.setItem(INPUT_DIR_MODE_LS_KEY, mode);
         reapplyInputDirection();
     }
+
+    // ─── Monaco Editor RTL toggle ─────────────────────────────────────────────
+    function getMonacoRTLEnabled() {
+        return localStorage.getItem(MONACO_RTL_LS_KEY) !== 'false';
+    }
+    function setMonacoRTLEnabled(on) {
+        localStorage.setItem(MONACO_RTL_LS_KEY, String(on));
+        // If disabling, remove the RTL class from all Monaco editors immediately
+        if (!on) {
+            document.querySelectorAll('.' + RTL_MODE_CLASS).forEach(el => {
+                el.classList.remove(RTL_MODE_CLASS);
+            });
+        }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     /** Re-apply direction to all active inputs after mode toggle */
     function reapplyInputDirection() {
@@ -2004,6 +2044,13 @@
             if (element.matches && element.matches('[class*="timelineMessage_"], [class*="root_"]')) {
                 // Always re-process children — Rewind replaces inner elements
                 // while the container keeps its data-rtl-container-processed attribute
+                processChildrenForRTL(element);
+                element.setAttribute('data-rtl-container-processed', 'true');
+                return;
+            }
+
+            // Cursor agent messages - process all child elements
+            if (element.classList && element.classList.contains('whitespace-normal')) {
                 processChildrenForRTL(element);
                 element.setAttribute('data-rtl-container-processed', 'true');
                 return;

@@ -1798,7 +1798,11 @@
      */
     function ensureCodeBlocksLTR() {
         // Force all code blocks to be LTR immediately
-        const codeBlocks = document.querySelectorAll('div.code, pre, code');
+        const codeBlocks = document.querySelectorAll(
+            'div.code, pre, code, ' +
+            // Cursor agent message code blocks
+            '.composer-message-codeblock, .ui-default-code, .ui-code-block-default-code'
+        );
         codeBlocks.forEach(block => {
             block.style.direction = 'ltr';
             block.style.textAlign = 'left';

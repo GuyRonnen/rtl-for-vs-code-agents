@@ -548,11 +548,6 @@
 
             /* Copilot / VS Code Chat — user message accent border (also dynamic) */
 
-            /* Cursor Composer — RTL user messages: flip flex direction so text aligns right */
-            .composer-human-message .justify-between {
-                direction: rtl !important;
-            }
-
             /* Bright scrollbar for chat panel */
             * {
                 scrollbar-color: rgba(255, 255, 255, 0.45) transparent !important;
@@ -1794,6 +1789,28 @@
     }
 
     /**
+     * Cursor — conditionally apply RTL to user message bubbles based on content.
+     * User messages don't go through processChildrenForRTL because they don't
+     * have .markdown-root. We flag .composer-human-message-content directly so
+     * Hebrew/Arabic messages flip to RTL while English ones stay LTR.
+     */
+    function processCursorUserMessages() {
+        document.querySelectorAll('.composer-human-message-content').forEach(el => {
+            const text = el.textContent || '';
+            const hasRTL = shouldBeRTLText(text);
+            const wasRTL = el.getAttribute('data-rtl-applied') === 'true';
+
+            if (hasRTL && !wasRTL) {
+                el.style.direction = 'rtl';
+                el.setAttribute('data-rtl-applied', 'true');
+            } else if (!hasRTL && wasRTL) {
+                el.style.direction = '';
+                el.removeAttribute('data-rtl-applied');
+            }
+        });
+    }
+
+    /**
      * Ensure all code blocks are LTR
      */
     function ensureCodeBlocksLTR() {
@@ -2097,6 +2114,9 @@
 
         // Process Claude Code Planning webview (separate tab)
         processPlanningWebview();
+
+        // Cursor user messages — conditionally RTL based on content
+        processCursorUserMessages();
 
         // Ensure all code blocks are LTR (run after RTL processing)
         ensureCodeBlocksLTR();

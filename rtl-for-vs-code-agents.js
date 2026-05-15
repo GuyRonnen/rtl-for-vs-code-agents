@@ -1789,13 +1789,16 @@
     }
 
     /**
-     * Cursor — conditionally apply RTL to user message bubbles based on content.
-     * User messages don't go through processChildrenForRTL because they don't
-     * have .markdown-root. We flag .composer-human-message-content directly so
-     * Hebrew/Arabic messages flip to RTL while English ones stay LTR.
+     * Cursor — conditionally apply RTL to user-side bubbles based on content.
+     * Targets:
+     *   .composer-human-message-content — regular user message bubbles
+     *   .composer-questionnaire-toolbar — inline questionnaire / choice toolbar
+     * These don't go through processChildrenForRTL because they don't have
+     * .markdown-root, so we flag them directly: Hebrew/Arabic flips to RTL,
+     * English stays LTR.
      */
     function processCursorUserMessages() {
-        document.querySelectorAll('.composer-human-message-content').forEach(el => {
+        document.querySelectorAll('.composer-human-message-content, .composer-questionnaire-toolbar').forEach(el => {
             const text = el.textContent || '';
             const hasRTL = shouldBeRTLText(text);
             const wasRTL = el.getAttribute('data-rtl-applied') === 'true';

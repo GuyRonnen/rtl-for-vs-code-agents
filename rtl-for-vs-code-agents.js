@@ -1805,9 +1805,13 @@
 
             if (hasRTL && !wasRTL) {
                 el.style.direction = 'rtl';
+                // Multi-line messages (auto-wrapped or manual Enter) need text-align too —
+                // direction alone only handles single-line bubbles via flex justify-content.
+                el.style.textAlign = 'right';
                 el.setAttribute('data-rtl-applied', 'true');
             } else if (!hasRTL && wasRTL) {
                 el.style.direction = '';
+                el.style.textAlign = '';
                 el.removeAttribute('data-rtl-applied');
             }
         });

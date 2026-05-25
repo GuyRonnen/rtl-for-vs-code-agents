@@ -411,6 +411,25 @@
                 text-align: left !important;
             }
 
+            /* Cursor streamdown — during streaming, each word is wrapped in its own
+               <span data-sd-animate="true"> for the word-by-word fade-in animation,
+               and Cursor wraps bold/italic groups in <span data-streamdown="strong">.
+
+               With unicode-bidi: isolate (the broad rule applied to chat content),
+               each span becomes its own bidi unit ordered by DOM order, which under
+               an RTL parent makes Hebrew words appear in reverse order — visible
+               most clearly on bold text during streaming.
+
+               Setting unicode-bidi: normal on these spans lets them rejoin the
+               parent <p>'s bidi flow, so the bidi algorithm sees the whole sentence
+               as one RTL run and orders words correctly. After streaming ends Cursor
+               merges the per-word spans into a single span; both states work with
+               this rule. */
+            [data-sd-animate="true"],
+            [data-streamdown] {
+                unicode-bidi: normal !important;
+            }
+
             /* Codex composer */
             [data-codex-composer="true"],
             [data-codex-composer="true"] p {

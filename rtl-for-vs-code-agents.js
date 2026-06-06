@@ -102,6 +102,27 @@
         { start: 0x0780, end: 0x07BF }
     ];
 
+    // -------------------------------------------------------------------------
+    // Markdown / document editor guard (NOT the whole editor chrome)
+    // -------------------------------------------------------------------------
+    // v1.0.6 used .editor-container / .editor-group-container — too broad;
+    // Cursor can host Composer chat under those wrappers, which disabled RTL.
+    //
+    // Skip only surfaces that match the real Markdown document editor / preview:
+    // - Cursor's react markdown editor (.markdown-editor-react, data-variant=document)
+    // - Classic VS Code Markdown Preview tab (.markdown-body inside .editor-container)
+    const SKIP_RTL_ZONE_SELECTOR = [
+        '.markdown-editor-react',
+        '.ui-rich-text-editor[data-variant="document"]',
+        '.markdown-preview',
+        '.editor-container .markdown-body'
+    ].join(', ');
+
+    function isInsideEditorArea(node) {
+        if (!node || node.nodeType !== 1) return false;
+        return !!(node.closest && node.closest(SKIP_RTL_ZONE_SELECTOR));
+    }
+
     /**
      * Check if a character is RTL
      */
@@ -1847,6 +1868,10 @@
             '.composer-message-codeblock, .ui-default-code, .ui-code-block-default-code'
         );
         codeBlocks.forEach(block => {
+            // Don't touch code blocks in markdown preview / document editor — see SKIP_RTL_ZONE_SELECTOR
+            // comment. A single .md preview can hold hundreds of <pre>/<code>
+            // nodes and writing inline styles on each every 200ms freezes Cursor.
+            if (isInsideEditorArea(block)) return;
             block.style.direction = 'ltr';
             block.style.textAlign = 'left';
             block.style.unicodeBidi = 'embed';
@@ -2043,6 +2068,9 @@
         const elements = document.querySelectorAll(selector);
 
         elements.forEach(element => {
+            // Skip markdown document editor / preview only — see SKIP_RTL_ZONE_SELECTOR
+            if (isInsideEditorArea(element)) return;
+
             // Antigravity user message
             if (element.classList && element.classList.contains('whitespace-pre-wrap')) {
                 // Simple RTL detection for user messages
@@ -2167,10 +2195,19 @@
             let hasTextChanges = false;
 
             mutations.forEach((mutation) => {
+                // Ignore mutations originating inside the editor area
+                // Markdown document editor / preview — see SKIP_RTL_ZONE_SELECTOR
+                // from doing expensive work for every preview re-render.
+                if (isInsideEditorArea(mutation.target)) return;
+
                 if (mutation.addedNodes.length > 0) {
                     hasNewNodes = true;
                     mutation.addedNodes.forEach((node) => {
                         if (node.nodeType === 1) { // Element node
+                            // Skip nodes inserted into the editor area (e.g.
+                            // Markdown Preview rendering its content)
+                            if (isInsideEditorArea(node)) return;
+
                             // Immediately handle code blocks
                             if (node.tagName === 'PRE' || node.tagName === 'CODE' ||
                                 (node.classList && node.classList.contains('code'))) {
@@ -2206,6 +2243,7 @@
 
                             // Process chat elements immediately
                             chatElements.forEach(element => {
+                                if (isInsideEditorArea(element)) return;
                                 // Claude Code timeline/agent messages - process all child elements
                                 if (element.matches && element.matches('[class*="timelineMessage_"], [class*="root_"]')) {
                                     processChildrenForRTL(element);

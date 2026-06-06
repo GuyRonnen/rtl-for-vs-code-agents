@@ -31,6 +31,8 @@
 
         // Selectors for chat content (add more as needed for different agents)
         chatSelectors: [
+            // Cursor (Composer / Agent panel) — all leaf text nodes under .conversations
+            '.markdown-root > div',
             // Copilot
             '.chat-markdown-part.rendered-markdown',
             '.chat-markdown-part',
@@ -99,6 +101,27 @@
         // Thaana (Maldivian): U+0780 to U+07BF
         { start: 0x0780, end: 0x07BF }
     ];
+
+    // -------------------------------------------------------------------------
+    // Markdown / document editor guard (NOT the whole editor chrome)
+    // -------------------------------------------------------------------------
+    // v1.0.6 used .editor-container / .editor-group-container — too broad;
+    // Cursor can host Composer chat under those wrappers, which disabled RTL.
+    //
+    // Skip only surfaces that match the real Markdown document editor / preview:
+    // - Cursor's react markdown editor (.markdown-editor-react, data-variant=document)
+    // - Classic VS Code Markdown Preview tab (.markdown-body inside .editor-container)
+    const SKIP_RTL_ZONE_SELECTOR = [
+        '.markdown-editor-react',
+        '.ui-rich-text-editor[data-variant="document"]',
+        '.markdown-preview',
+        '.editor-container .markdown-body'
+    ].join(', ');
+
+    function isInsideEditorArea(node) {
+        if (!node || node.nodeType !== 1) return false;
+        return !!(node.closest && node.closest(SKIP_RTL_ZONE_SELECTOR));
+    }
 
     /**
      * Check if a character is RTL
@@ -264,6 +287,9 @@
             }
         });
 
+        // Apply to tables (chat markdown, plan docs, etc.)
+        element.querySelectorAll('table').forEach(applyTableRTL);
+
         // Keep code blocks LTR (including div.code for Copilot)
         element.querySelectorAll('div.code, pre, code').forEach(el => {
             el.style.direction = 'ltr';
@@ -407,6 +433,52 @@
                 unicode-bidi: embed !important;
                 direction: ltr !important;
                 text-align: left !important;
+            }
+
+            /* Cursor streamdown — during streaming, each word is wrapped in its own
+               <span data-sd-animate="true"> for the word-by-word fade-in animation,
+               and Cursor wraps bold/italic groups in <span data-streamdown="strong">.
+
+               With unicode-bidi: isolate (the broad rule applied to chat content),
+               each span becomes its own bidi unit ordered by DOM order, which under
+               an RTL parent makes Hebrew words appear in reverse order — visible
+               most clearly on bold text during streaming.
+
+               Setting unicode-bidi: normal on these spans lets them rejoin the
+               parent <p>'s bidi flow, so the bidi algorithm sees the whole sentence
+               as one RTL run and orders words correctly. After streaming ends Cursor
+               merges the per-word spans into a single span; both states work with
+               this rule. */
+            [data-sd-animate="true"],
+            [data-streamdown] {
+                unicode-bidi: normal !important;
+            }
+
+            /* Markdown document / preview tables (Cursor streamdown, VS Code preview) */
+            .markdown-root table[data-rtl-table="true"],
+            .markdown-body table[data-rtl-table="true"] {
+                direction: rtl !important;
+                text-align: right !important;
+            }
+            .markdown-root table[data-rtl-table="true"] th,
+            .markdown-root table[data-rtl-table="true"] td,
+            .markdown-body table[data-rtl-table="true"] th,
+            .markdown-body table[data-rtl-table="true"] td {
+                direction: rtl !important;
+                text-align: right !important;
+                unicode-bidi: isolate !important;
+            }
+            .markdown-root table[data-rtl-table="true"] [data-streamdown],
+            .markdown-body table[data-rtl-table="true"] [data-streamdown] {
+                unicode-bidi: normal !important;
+            }
+            .markdown-root table[data-rtl-table="true"] pre,
+            .markdown-root table[data-rtl-table="true"] code,
+            .markdown-body table[data-rtl-table="true"] pre,
+            .markdown-body table[data-rtl-table="true"] code {
+                direction: ltr !important;
+                text-align: left !important;
+                unicode-bidi: embed !important;
             }
 
             /* Codex composer */
@@ -878,6 +950,7 @@
      * Uses CSS class toggle on parent instead of inline styles to prevent flickering
      */
     function processMonacoInputs() {
+        if (!getMonacoRTLEnabled()) return;
         const viewLines = document.querySelectorAll('.view-line');
 
         viewLines.forEach(viewLine => {
@@ -903,8 +976,18 @@
     function processInputs() {
         const selector = CONFIG.inputSelectors.join(', ');
         const inputs = document.querySelectorAll(selector);
+        const monacoRtlOff = !getMonacoRTLEnabled();
 
         inputs.forEach(input => {
+            // When Monaco RTL is disabled, skip view-lines that live inside a regular code editor
+            // (monaco-mouse-cursor-text is the class on the code editor's view-lines container)
+            if (monacoRtlOff && input.classList && input.classList.contains('view-line') &&
+                input.closest('.monaco-mouse-cursor-text')) {
+                // If we previously applied RTL, undo it
+                if (input.getAttribute('data-rtl-input') === 'true') removeInputRTL(input);
+                return;
+            }
+
             // Get the current text content
             const text = input.textContent || input.innerText || '';
             const hasRTL = containsRTL(text);
@@ -957,6 +1040,7 @@
     const YOLO_POLL_MS = 500;
     const BORDER_LS_KEY = 'rtl-user-msg-border';
     const INPUT_DIR_MODE_LS_KEY = 'rtl-input-dir-mode'; // 'uniform' (default) or 'per-line'
+    const MONACO_RTL_LS_KEY = 'rtl-monaco-enabled'; // true (default) or false
 
     // Seed localStorage from injected config (only if not already set by user)
     if (localStorage.getItem(YOLO_LS_KEY) === null) {
@@ -976,6 +1060,12 @@
         const seed = (window.__RTL_CONFIG__ && window.__RTL_CONFIG__.inputDirMode)
             ? window.__RTL_CONFIG__.inputDirMode : 'uniform';
         localStorage.setItem(INPUT_DIR_MODE_LS_KEY, seed);
+    }
+    // Monaco RTL — always sync from __RTL_CONFIG__ so Settings change takes effect after Disable/Enable Custom CSS
+    if (window.__RTL_CONFIG__ && typeof window.__RTL_CONFIG__.monacoRtlEnabled === 'boolean') {
+        localStorage.setItem(MONACO_RTL_LS_KEY, String(window.__RTL_CONFIG__.monacoRtlEnabled));
+    } else if (localStorage.getItem(MONACO_RTL_LS_KEY) === null) {
+        localStorage.setItem(MONACO_RTL_LS_KEY, 'true');
     }
 
     /** Read YOLO delay dynamically — changes take effect on next poll without reload */
@@ -1001,6 +1091,21 @@
         localStorage.setItem(INPUT_DIR_MODE_LS_KEY, mode);
         reapplyInputDirection();
     }
+
+    // ─── Monaco Editor RTL toggle ─────────────────────────────────────────────
+    function getMonacoRTLEnabled() {
+        return localStorage.getItem(MONACO_RTL_LS_KEY) !== 'false';
+    }
+    function setMonacoRTLEnabled(on) {
+        localStorage.setItem(MONACO_RTL_LS_KEY, String(on));
+        // If disabling, remove the RTL class from all Monaco editors immediately
+        if (!on) {
+            document.querySelectorAll('.' + RTL_MODE_CLASS).forEach(el => {
+                el.classList.remove(RTL_MODE_CLASS);
+            });
+        }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     /** Re-apply direction to all active inputs after mode toggle */
     function reapplyInputDirection() {
@@ -1754,15 +1859,107 @@
     }
 
     /**
+     * Cursor — conditionally apply RTL to user-side bubbles based on content.
+     * Targets:
+     *   .composer-human-message-content — regular user message bubbles
+     *   .composer-questionnaire-toolbar — inline questionnaire / choice toolbar
+     * These don't go through processChildrenForRTL because they don't have
+     * .markdown-root, so we flag them directly: Hebrew/Arabic flips to RTL,
+     * English stays LTR.
+     */
+    function processCursorUserMessages() {
+        document.querySelectorAll('.composer-human-message-content, .composer-questionnaire-toolbar').forEach(el => {
+            const text = el.textContent || '';
+            const hasRTL = shouldBeRTLText(text);
+            const wasRTL = el.getAttribute('data-rtl-applied') === 'true';
+
+            if (hasRTL && !wasRTL) {
+                el.style.direction = 'rtl';
+                // Multi-line messages (auto-wrapped or manual Enter) need text-align too —
+                // direction alone only handles single-line bubbles via flex justify-content.
+                el.style.textAlign = 'right';
+                el.setAttribute('data-rtl-applied', 'true');
+            } else if (!hasRTL && wasRTL) {
+                el.style.direction = '';
+                el.style.textAlign = '';
+                el.removeAttribute('data-rtl-applied');
+            }
+        });
+    }
+
+    /**
      * Ensure all code blocks are LTR
      */
     function ensureCodeBlocksLTR() {
         // Force all code blocks to be LTR immediately
-        const codeBlocks = document.querySelectorAll('div.code, pre, code');
+        const codeBlocks = document.querySelectorAll(
+            'div.code, pre, code, ' +
+            // Cursor agent message code blocks
+            '.composer-message-codeblock, .ui-default-code, .ui-code-block-default-code'
+        );
         codeBlocks.forEach(block => {
+            // Don't touch code blocks in markdown preview / document editor — see SKIP_RTL_ZONE_SELECTOR
+            // comment. A single .md preview can hold hundreds of <pre>/<code>
+            // nodes and writing inline styles on each every 200ms freezes Cursor.
+            if (isInsideEditorArea(block)) return;
             block.style.direction = 'ltr';
             block.style.textAlign = 'left';
             block.style.unicodeBidi = 'embed';
+        });
+    }
+
+    /**
+     * Apply RTL to a table: direction for BiDi/column flow + text-align on cells
+     * so mixed Hebrew/English is readable and flush right (direction alone is not enough).
+     */
+    function applyTableRTL(table) {
+        const text = table.textContent || '';
+        const hasRTL = containsRTL(text);
+
+        if (!hasRTL) {
+            if (table.getAttribute('data-rtl-table') === 'true') {
+                table.style.direction = '';
+                table.style.textAlign = '';
+                table.removeAttribute('data-rtl-table');
+                table.querySelectorAll('th, td').forEach(cell => {
+                    cell.style.direction = '';
+                    cell.style.textAlign = '';
+                    cell.style.unicodeBidi = '';
+                    cell.removeAttribute('data-rtl-applied');
+                });
+            }
+            return;
+        }
+
+        table.style.direction = 'rtl';
+        table.style.textAlign = 'right';
+        table.setAttribute('data-rtl-table', 'true');
+
+        table.querySelectorAll('th, td').forEach(cell => {
+            cell.style.direction = 'rtl';
+            cell.style.textAlign = 'right';
+            cell.style.unicodeBidi = 'isolate';
+            cell.setAttribute('data-rtl-applied', 'true');
+            if (shouldBeRTLText(cell.textContent)) {
+                injectRLM(cell);
+            }
+        });
+
+        table.querySelectorAll('pre, code').forEach(code => {
+            code.style.direction = 'ltr';
+            code.style.textAlign = 'left';
+            code.style.unicodeBidi = 'embed';
+        });
+    }
+
+    /**
+     * Lightweight RTL pass for Markdown document editor / preview only.
+     * The full processElements() skips these zones to avoid preview freezes;
+     * tables are few and cheap to style.
+     */
+    function processMarkdownDocumentTables() {
+        document.querySelectorAll(SKIP_RTL_ZONE_SELECTOR).forEach(root => {
+            root.querySelectorAll('table').forEach(applyTableRTL);
         });
     }
 
@@ -1806,6 +2003,8 @@
                 el.setAttribute('data-rtl-applied', 'true');
             }
         });
+
+        element.querySelectorAll('table').forEach(applyTableRTL);
     }
 
     /**
@@ -1956,6 +2155,9 @@
         const elements = document.querySelectorAll(selector);
 
         elements.forEach(element => {
+            // Skip markdown document editor / preview only — see SKIP_RTL_ZONE_SELECTOR
+            if (isInsideEditorArea(element)) return;
+
             // Antigravity user message
             if (element.classList && element.classList.contains('whitespace-pre-wrap')) {
                 // Simple RTL detection for user messages
@@ -2009,6 +2211,13 @@
                 return;
             }
 
+            // Cursor agent messages - process all child elements
+            if (element.classList && element.classList.contains('whitespace-normal')) {
+                processChildrenForRTL(element);
+                element.setAttribute('data-rtl-container-processed', 'true');
+                return;
+            }
+
             // Default logic for Copilot/Claude user messages
             const wasRTL = element.getAttribute('data-rtl-applied') === 'true';
             const needsRTL = shouldBeRTL(element);
@@ -2047,6 +2256,12 @@
         // Process Claude Code Planning webview (separate tab)
         processPlanningWebview();
 
+        // Cursor user messages — conditionally RTL based on content
+        processCursorUserMessages();
+
+        // Markdown document / preview tables (skipped by isInsideEditorArea above)
+        processMarkdownDocumentTables();
+
         // Ensure all code blocks are LTR (run after RTL processing)
         ensureCodeBlocksLTR();
 
@@ -2070,10 +2285,31 @@
             let hasTextChanges = false;
 
             mutations.forEach((mutation) => {
+                // Ignore mutations originating inside the editor area
+                // Markdown document editor / preview — see SKIP_RTL_ZONE_SELECTOR
+                // from doing expensive work for every preview re-render.
+                if (isInsideEditorArea(mutation.target)) {
+                    mutation.addedNodes.forEach((node) => {
+                        if (node.nodeType === 1) {
+                            if (node.tagName === 'TABLE') applyTableRTL(node);
+                            else node.querySelectorAll('table').forEach(applyTableRTL);
+                        }
+                    });
+                    return;
+                }
+
                 if (mutation.addedNodes.length > 0) {
                     hasNewNodes = true;
                     mutation.addedNodes.forEach((node) => {
                         if (node.nodeType === 1) { // Element node
+                            // Skip nodes inserted into the editor area (e.g.
+                            // Markdown Preview rendering its content)
+                            if (isInsideEditorArea(node)) {
+                                if (node.tagName === 'TABLE') applyTableRTL(node);
+                                else node.querySelectorAll('table').forEach(applyTableRTL);
+                                return;
+                            }
+
                             // Immediately handle code blocks
                             if (node.tagName === 'PRE' || node.tagName === 'CODE' ||
                                 (node.classList && node.classList.contains('code'))) {
@@ -2109,6 +2345,7 @@
 
                             // Process chat elements immediately
                             chatElements.forEach(element => {
+                                if (isInsideEditorArea(element)) return;
                                 // Claude Code timeline/agent messages - process all child elements
                                 if (element.matches && element.matches('[class*="timelineMessage_"], [class*="root_"]')) {
                                     processChildrenForRTL(element);

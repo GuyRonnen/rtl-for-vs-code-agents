@@ -287,6 +287,9 @@
             }
         });
 
+        // Apply to tables (chat markdown, plan docs, etc.)
+        element.querySelectorAll('table').forEach(applyTableRTL);
+
         // Keep code blocks LTR (including div.code for Copilot)
         element.querySelectorAll('div.code, pre, code').forEach(el => {
             el.style.direction = 'ltr';
@@ -449,6 +452,33 @@
             [data-sd-animate="true"],
             [data-streamdown] {
                 unicode-bidi: normal !important;
+            }
+
+            /* Markdown document / preview tables (Cursor streamdown, VS Code preview) */
+            .markdown-root table[data-rtl-table="true"],
+            .markdown-body table[data-rtl-table="true"] {
+                direction: rtl !important;
+                text-align: right !important;
+            }
+            .markdown-root table[data-rtl-table="true"] th,
+            .markdown-root table[data-rtl-table="true"] td,
+            .markdown-body table[data-rtl-table="true"] th,
+            .markdown-body table[data-rtl-table="true"] td {
+                direction: rtl !important;
+                text-align: right !important;
+                unicode-bidi: isolate !important;
+            }
+            .markdown-root table[data-rtl-table="true"] [data-streamdown],
+            .markdown-body table[data-rtl-table="true"] [data-streamdown] {
+                unicode-bidi: normal !important;
+            }
+            .markdown-root table[data-rtl-table="true"] pre,
+            .markdown-root table[data-rtl-table="true"] code,
+            .markdown-body table[data-rtl-table="true"] pre,
+            .markdown-body table[data-rtl-table="true"] code {
+                direction: ltr !important;
+                text-align: left !important;
+                unicode-bidi: embed !important;
             }
 
             /* Codex composer */
@@ -1879,6 +1909,61 @@
     }
 
     /**
+     * Apply RTL to a table: direction for BiDi/column flow + text-align on cells
+     * so mixed Hebrew/English is readable and flush right (direction alone is not enough).
+     */
+    function applyTableRTL(table) {
+        const text = table.textContent || '';
+        const hasRTL = containsRTL(text);
+
+        if (!hasRTL) {
+            if (table.getAttribute('data-rtl-table') === 'true') {
+                table.style.direction = '';
+                table.style.textAlign = '';
+                table.removeAttribute('data-rtl-table');
+                table.querySelectorAll('th, td').forEach(cell => {
+                    cell.style.direction = '';
+                    cell.style.textAlign = '';
+                    cell.style.unicodeBidi = '';
+                    cell.removeAttribute('data-rtl-applied');
+                });
+            }
+            return;
+        }
+
+        table.style.direction = 'rtl';
+        table.style.textAlign = 'right';
+        table.setAttribute('data-rtl-table', 'true');
+
+        table.querySelectorAll('th, td').forEach(cell => {
+            cell.style.direction = 'rtl';
+            cell.style.textAlign = 'right';
+            cell.style.unicodeBidi = 'isolate';
+            cell.setAttribute('data-rtl-applied', 'true');
+            if (shouldBeRTLText(cell.textContent)) {
+                injectRLM(cell);
+            }
+        });
+
+        table.querySelectorAll('pre, code').forEach(code => {
+            code.style.direction = 'ltr';
+            code.style.textAlign = 'left';
+            code.style.unicodeBidi = 'embed';
+        });
+    }
+
+    /**
+     * Lightweight RTL pass for Markdown document editor / preview only.
+     * The full processElements() skips these zones to avoid preview freezes;
+     * tables are few and cheap to style.
+     */
+    function processMarkdownDocumentTables() {
+        document.querySelectorAll(SKIP_RTL_ZONE_SELECTOR).forEach(root => {
+            root.querySelectorAll('table').forEach(applyTableRTL);
+        });
+    }
+
+    /**
      * Process individual child elements for RTL
      * This handles cases where a message starts in English but has Hebrew paragraphs
      */
@@ -1918,6 +2003,8 @@
                 el.setAttribute('data-rtl-applied', 'true');
             }
         });
+
+        element.querySelectorAll('table').forEach(applyTableRTL);
     }
 
     /**
@@ -2172,6 +2259,9 @@
         // Cursor user messages — conditionally RTL based on content
         processCursorUserMessages();
 
+        // Markdown document / preview tables (skipped by isInsideEditorArea above)
+        processMarkdownDocumentTables();
+
         // Ensure all code blocks are LTR (run after RTL processing)
         ensureCodeBlocksLTR();
 
@@ -2198,7 +2288,15 @@
                 // Ignore mutations originating inside the editor area
                 // Markdown document editor / preview — see SKIP_RTL_ZONE_SELECTOR
                 // from doing expensive work for every preview re-render.
-                if (isInsideEditorArea(mutation.target)) return;
+                if (isInsideEditorArea(mutation.target)) {
+                    mutation.addedNodes.forEach((node) => {
+                        if (node.nodeType === 1) {
+                            if (node.tagName === 'TABLE') applyTableRTL(node);
+                            else node.querySelectorAll('table').forEach(applyTableRTL);
+                        }
+                    });
+                    return;
+                }
 
                 if (mutation.addedNodes.length > 0) {
                     hasNewNodes = true;
@@ -2206,7 +2304,11 @@
                         if (node.nodeType === 1) { // Element node
                             // Skip nodes inserted into the editor area (e.g.
                             // Markdown Preview rendering its content)
-                            if (isInsideEditorArea(node)) return;
+                            if (isInsideEditorArea(node)) {
+                                if (node.tagName === 'TABLE') applyTableRTL(node);
+                                else node.querySelectorAll('table').forEach(applyTableRTL);
+                                return;
+                            }
 
                             // Immediately handle code blocks
                             if (node.tagName === 'PRE' || node.tagName === 'CODE' ||

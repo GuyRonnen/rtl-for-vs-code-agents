@@ -1973,30 +1973,11 @@
             }
             // Antigravity agent message
             if (element.classList && element.classList.contains('prose') && element.classList.contains('prose-sm')) {
-                // Only process if not already processed
-                if (!element.hasAttribute('data-rtl-container-processed')) {
-                    const firstText = (element.textContent || '').trim().substring(0, 100);
-                    if (shouldBeRTLText(firstText)) {
-                        element.setAttribute('data-rtl-container-processed', 'true');
-                        // Apply RTL to text elements that should be RTL (check each independently)
-                        element.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li').forEach(el => {
-                            if (shouldBeRTLText(el.textContent)) {
-                                el.style.direction = 'rtl';
-                                el.style.textAlign = 'right';
-                                el.setAttribute('data-rtl-applied', 'true');
-                                if (el.tagName === 'LI') {
-                                    el.style.listStylePosition = 'inside';
-                                }
-                            }
-                        });
-                        // Also handle lists (ol, ul)
-                        element.querySelectorAll('ol, ul').forEach(list => {
-                            list.style.direction = 'rtl';
-                            list.style.textAlign = 'right';
-                            list.setAttribute('data-rtl-applied', 'true');
-                        });
-                    }
-                }
+                // Always re-process children — Antigravity streams the answer in
+                // gradually, appending new paragraphs after the container first
+                // appears, so a one-shot "container processed" flag would leave
+                // later chunks unstyled.
+                processChildrenForRTL(element);
                 return;
             }
 

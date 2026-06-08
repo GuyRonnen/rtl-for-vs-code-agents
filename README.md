@@ -171,6 +171,10 @@ powershell -ExecutionPolicy Bypass -File .\diagnose-rtl.ps1
 <details>
 <summary>Changelog</summary>
 
+### v10.1.2
+- **Antigravity IDE detection fix:** The extension scanner now also looks in `~/.antigravity-ide/extensions` (and its remote/WSL variant), matching Antigravity IDE's actual install layout — the inject command was silently finding nothing because it only checked `~/.antigravity/extensions`
+- **Antigravity streamed answers:** Agent responses are now re-styled as they stream in, instead of being evaluated once when the message container first appears — long answers no longer end up partly LTR
+
 ### v10.1.1
 - **WSL/Remote detection:** Added support for detecting Claude Code, Codex, and Gemini installations under VS Code/Cursor remote server extension folders such as `~/.vscode-server/extensions`
 

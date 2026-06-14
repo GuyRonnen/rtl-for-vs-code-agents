@@ -44,7 +44,9 @@ function listExtensionInstallations() {
         { label: 'VS Code Insiders (Remote/WSL)', basePath: path.join(home, '.vscode-server-insiders', 'extensions') },
         { label: 'Cursor', basePath: path.join(home, '.cursor', 'extensions') },
         { label: 'Cursor (Remote/WSL)', basePath: path.join(home, '.cursor-server', 'extensions') },
-        { label: 'Antigravity', basePath: path.join(home, '.antigravity', 'extensions') }
+        { label: 'Antigravity', basePath: path.join(home, '.antigravity', 'extensions') },
+        { label: 'Antigravity IDE', basePath: path.join(home, '.antigravity-ide', 'extensions') },
+        { label: 'Antigravity IDE (Remote/WSL)', basePath: path.join(home, '.antigravity-ide-server', 'extensions') }
     ];
 
     // Extension patterns to search for

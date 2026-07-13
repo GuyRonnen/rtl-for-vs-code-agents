@@ -1868,7 +1868,7 @@
      * English stays LTR.
      */
     function processCursorUserMessages() {
-        document.querySelectorAll('.composer-human-message-content, .composer-questionnaire-toolbar').forEach(el => {
+        document.querySelectorAll('.composer-human-message-content, .composer-questionnaire-toolbar, .user-questionnaire-answer-text').forEach(el => {
             const text = el.textContent || '';
             const hasRTL = shouldBeRTLText(text);
             const wasRTL = el.getAttribute('data-rtl-applied') === 'true';

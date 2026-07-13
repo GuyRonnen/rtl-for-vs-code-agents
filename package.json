@@ -2,7 +2,7 @@
   "name": "rtl-for-vs-code-agents",
   "displayName": "RTL for VS Code Agents",
   "description": "Right-to-left (RTL) support for AI chat agents: Claude Code, Codex (ChatGPT), Copilot, Gemini, Antigravity.",
-  "version": "10.3.0",
+  "version": "10.3.1",
   "publisher": "local",
   "license": "GPL-3.0",
   "repository": {

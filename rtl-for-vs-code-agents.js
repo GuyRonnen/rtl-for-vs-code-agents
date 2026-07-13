@@ -325,9 +325,17 @@
      */
     function removeInputRTL(element) {
         element.removeAttribute('dir');
-        element.style.direction = 'ltr';
-        element.style.textAlign = 'left';
+        // Clear (don't hard-code ltr/left) so the input returns to the agent's
+        // native rendering — this keeps it identical to the mirror, which
+        // syncMirrorRTL(false) also resets to native below. fontFamily MUST be
+        // reset too: applyInputRTL set it to CONFIG.fontFamily, and leaving it
+        // stale desyncs the transparent input (caret + box height) from the
+        // visible mentionMirror, causing caret drift and clipped/non-growing
+        // input on the RTL→LTR (Hebrew→English) transition.
+        element.style.direction = '';
+        element.style.textAlign = '';
         element.style.unicodeBidi = '';
+        element.style.fontFamily = '';
         element.removeAttribute('data-rtl-input');
 
         // Sync LTR to mentionMirror sibling

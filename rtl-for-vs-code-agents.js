@@ -490,29 +490,56 @@
                 unicode-bidi: embed !important;
             }
 
-            /* Markdown document editor / preview tables — styled by CSS only, never JS.
-               These surfaces are ProseMirror-backed: it re-parses the DOM whenever it
-               sees an external mutation, so writing inline styles / attributes / RLM
-               marks here starts a parse-render loop that blocks the renderer for tens
-               of seconds on large documents. plaintext lets the browser resolve each
-               cell's direction from its own first strong character instead. */
-            .markdown-editor-react table th,
-            .markdown-editor-react table td,
-            .ui-rich-text-editor[data-variant="document"] table th,
-            .ui-rich-text-editor[data-variant="document"] table td,
-            .markdown-preview table th,
-            .markdown-preview table td,
-            .editor-container .markdown-body table th,
-            .editor-container .markdown-body table td {
+            /* Markdown document preview — gated on [data-rtl-md], which
+               markMarkdownDocumentDirection() writes on the wrapper ABOVE the editor's
+               ProseMirror root. Everything below that root must be styled by CSS only:
+               ProseMirror re-parses its DOM on any external mutation, so inline styles,
+               attributes or RLM marks written inside it start a parse-render loop that
+               blocked the renderer for up to 80s on large documents.
+
+               plaintext gives each block its own direction from its first strong
+               character, so a Hebrew paragraph and an English one can sit side by side. */
+            [data-rtl-md] p,
+            [data-rtl-md] li,
+            [data-rtl-md] h1,
+            [data-rtl-md] h2,
+            [data-rtl-md] h3,
+            [data-rtl-md] h4,
+            [data-rtl-md] h5,
+            [data-rtl-md] h6,
+            [data-rtl-md] blockquote,
+            [data-rtl-md] th,
+            [data-rtl-md] td {
                 unicode-bidi: plaintext !important;
                 text-align: start !important;
             }
-            .markdown-editor-react table code,
-            .ui-rich-text-editor[data-variant="document"] table code,
-            .markdown-preview table code,
-            .editor-container .markdown-body table code {
-                unicode-bidi: embed !important;
+
+            /* An RTL-dominant document needs a real direction on the content root:
+               plaintext only orders text, it can't move list markers, blockquote
+               rules or table columns to the other side. */
+            [data-rtl-md="rtl"] .ProseMirror,
+            [data-rtl-md="rtl"].markdown-preview,
+            [data-rtl-md="rtl"].markdown-body {
+                direction: rtl !important;
+            }
+
+            /* Stock markdown styling hardcodes physical sides; mirror them for RTL. */
+            [data-rtl-md="rtl"] blockquote {
+                border-left-width: 0 !important;
+                border-right-width: 5px !important;
+                border-right-style: solid !important;
+            }
+            [data-rtl-md="rtl"] table {
+                margin-left: auto !important;
+            }
+
+            /* Code is never prose — keep it LTR whatever the surrounding block does. */
+            [data-rtl-md] pre,
+            [data-rtl-md] pre code,
+            [data-rtl-md] code {
                 direction: ltr !important;
+                unicode-bidi: isolate !important;
+                text-align: left !important;
             }
 
             /* Codex composer */
@@ -1075,6 +1102,7 @@
     const BORDER_LS_KEY = 'rtl-user-msg-border';
     const INPUT_DIR_MODE_LS_KEY = 'rtl-input-dir-mode'; // 'uniform' (default) or 'per-line'
     const MONACO_RTL_LS_KEY = 'rtl-monaco-enabled'; // true (default) or false
+    const MD_PREVIEW_RTL_LS_KEY = 'rtl-md-preview-enabled'; // true (default) or false
 
     // Seed localStorage from injected config (only if not already set by user)
     if (localStorage.getItem(YOLO_LS_KEY) === null) {
@@ -1100,6 +1128,12 @@
         localStorage.setItem(MONACO_RTL_LS_KEY, String(window.__RTL_CONFIG__.monacoRtlEnabled));
     } else if (localStorage.getItem(MONACO_RTL_LS_KEY) === null) {
         localStorage.setItem(MONACO_RTL_LS_KEY, 'true');
+    }
+    // Markdown preview RTL — same always-sync rule as Monaco above
+    if (window.__RTL_CONFIG__ && typeof window.__RTL_CONFIG__.markdownPreviewRtl === 'boolean') {
+        localStorage.setItem(MD_PREVIEW_RTL_LS_KEY, String(window.__RTL_CONFIG__.markdownPreviewRtl));
+    } else if (localStorage.getItem(MD_PREVIEW_RTL_LS_KEY) === null) {
+        localStorage.setItem(MD_PREVIEW_RTL_LS_KEY, 'true');
     }
 
     /** Read YOLO delay dynamically — changes take effect on next poll without reload */
@@ -1991,6 +2025,75 @@
         });
     }
 
+    // Wrappers that sit ABOVE the ProseMirror root of a Markdown document view.
+    // Confirmed against Cursor's DOM: .markdown-editor-react is seven levels above
+    // div.tiptap.ProseMirror[contenteditable], and ProseMirror only observes its own
+    // root downwards — so a write here is invisible to it. Nothing below that root
+    // may be touched; see the [data-rtl-md] CSS block.
+    const MD_DOC_WRAPPER_SELECTOR = [
+        '.markdown-editor-react',
+        '.ui-rich-text-editor[data-variant="document"]',
+        '.markdown-preview',
+        '.editor-container .markdown-body'
+    ].join(', ');
+
+    const mdDocDirectionCache = new WeakMap();
+    const MD_DOC_RECHECK_MS = 3000;
+
+    function getMarkdownPreviewRTLEnabled() {
+        return localStorage.getItem(MD_PREVIEW_RTL_LS_KEY) !== 'false';
+    }
+
+    /**
+     * Sample only enough leading text to decide a document's direction. These
+     * documents get large and this runs on every pass, so it stops early and never
+     * reads the whole thing. Code blocks are skipped — they're always Latin and
+     * would drag a Hebrew document towards LTR.
+     */
+    function sampleLeadingText(root) {
+        let text = '';
+        let seen = 0;
+        for (const child of root.children) {
+            if (++seen > 20 || text.length >= 600) break;
+            if (child.tagName === 'PRE') continue;
+            text += ' ' + (child.textContent || '').slice(0, 400);
+        }
+        return text;
+    }
+
+    /**
+     * Flag each Markdown document view with its overall direction for the CSS to
+     * pick up. Re-reads the text only when the block count changed or the cached
+     * answer went stale, and writes the attribute only when the value differs.
+     */
+    function markMarkdownDocumentDirection() {
+        const enabled = getMarkdownPreviewRTLEnabled();
+
+        document.querySelectorAll(MD_DOC_WRAPPER_SELECTOR).forEach(wrapper => {
+            if (!enabled) {
+                if (wrapper.hasAttribute('data-rtl-md')) wrapper.removeAttribute('data-rtl-md');
+                return;
+            }
+
+            const content = wrapper.querySelector('.ProseMirror') || wrapper;
+            const childCount = content.childElementCount;
+            const cached = mdDocDirectionCache.get(wrapper);
+            const now = Date.now();
+
+            let value;
+            if (cached && cached.childCount === childCount && now - cached.at < MD_DOC_RECHECK_MS) {
+                value = cached.value;
+            } else {
+                value = shouldBeRTLText(sampleLeadingText(content)) ? 'rtl' : 'ltr';
+                mdDocDirectionCache.set(wrapper, { value, childCount, at: now });
+            }
+
+            if (wrapper.getAttribute('data-rtl-md') !== value) {
+                wrapper.setAttribute('data-rtl-md', value);
+            }
+        });
+    }
+
     /**
      * Process individual child elements for RTL
      * This handles cases where a message starts in English but has Hebrew paragraphs
@@ -2286,6 +2389,9 @@
 
         // Cursor user messages — conditionally RTL based on content
         processCursorUserMessages();
+
+        // Markdown document preview direction (attribute only, above ProseMirror)
+        markMarkdownDocumentDirection();
 
         // Ensure all code blocks are LTR (run after RTL processing)
         ensureCodeBlocksLTR();

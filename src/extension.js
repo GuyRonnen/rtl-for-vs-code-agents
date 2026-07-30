@@ -150,7 +150,8 @@ function buildConfigBlock() {
     // can't fully fix that from a CSS/JS injection, we at least expose a toggle so users
     // who hit the issue can turn Monaco RTL off (chat messages still get RTL).
     const monacoRtlEnabled = config.get('monacoRtlEnabled', true);
-    return `window.__RTL_CONFIG__ = ${JSON.stringify({ yoloDelayMs: yoloSeconds * 1000, userMessageBorder, monacoRtlEnabled })};`;
+    const markdownPreviewRtl = config.get('markdownPreviewRtl', true);
+    return `window.__RTL_CONFIG__ = ${JSON.stringify({ yoloDelayMs: yoloSeconds * 1000, userMessageBorder, monacoRtlEnabled, markdownPreviewRtl })};`;
 }
 
 // rtl-config.js is a separate small file that contains only `window.__RTL_CONFIG__`.
@@ -945,7 +946,8 @@ async function activate(context) {
         vscode.workspace.onDidChangeConfiguration(e => {
             if (e.affectsConfiguration('rtlForVsCodeAgents.yoloCountdownSeconds') ||
                 e.affectsConfiguration('rtlForVsCodeAgents.userMessageBorder') ||
-                e.affectsConfiguration('rtlForVsCodeAgents.monacoRtlEnabled')) {
+                e.affectsConfiguration('rtlForVsCodeAgents.monacoRtlEnabled') ||
+                e.affectsConfiguration('rtlForVsCodeAgents.markdownPreviewRtl')) {
                 writeConfigFile(context.extensionPath);
                 const updated = reinjectAll(context.extensionPath);
                 if (updated > 0) {

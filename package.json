@@ -72,6 +72,11 @@
           "default": true,
           "markdownDescription": "Enable RTL support for Monaco Editor input boxes (e.g. Copilot chat input). Disable this if you see RTL applied to regular code editor windows.\n\n**Tip:** Changes take effect after running 'Disable Custom CSS and JS' → 'Enable Custom CSS and JS' → reload."
         },
+        "rtlForVsCodeAgents.markdownPreviewRtl": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Enable RTL in the Markdown document preview (Cursor's **Preview** tab).\n\nEach paragraph, heading, list item and table cell picks its own direction from its content, so Hebrew/Arabic blocks read right-to-left while English blocks stay left-to-right. When the document is RTL overall, list markers, blockquote rules and table column order flip too.\n\nThis is done entirely with CSS plus a single attribute written **above** the editor's ProseMirror root — never inside it — because that editor re-parses its DOM on any external change. Turn this off if a document renders in an unexpected direction.\n\n**Tip:** Changes take effect after running 'Disable Custom CSS and JS' → 'Enable Custom CSS and JS' → reload."
+        },
         "rtlForVsCodeAgents.autoCheckUpdates": {
           "type": "boolean",
           "default": true,

@@ -118,17 +118,34 @@
         '.editor-container .markdown-body'
     ].join(', ');
 
+    // Text nodes must resolve through their parent: characterData mutations report
+    // the text node itself, and returning false for those let every keystroke /
+    // re-render inside a Markdown document schedule a full processElements() pass.
     function isInsideEditorArea(node) {
-        if (!node || node.nodeType !== 1) return false;
-        return !!(node.closest && node.closest(SKIP_RTL_ZONE_SELECTOR));
+        if (!node) return false;
+        const el = node.nodeType === 1 ? node : node.parentElement;
+        if (!el || !el.closest) return false;
+        return !!el.closest(SKIP_RTL_ZONE_SELECTOR);
     }
+
+    // RTL_RANGES compiled into one character class. These run per character over
+    // whole messages/tables on every 200ms tick, so the previous per-character
+    // Array.some() closure showed up as real time on large documents.
+    const RTL_CHAR_RE = new RegExp('[' + RTL_RANGES.map(r =>
+        '\\u' + r.start.toString(16).padStart(4, '0') +
+        '-\\u' + r.end.toString(16).padStart(4, '0')
+    ).join('') + ']');
+    const LETTER_RE = /\p{L}/u;
+
+    // Direction only depends on the leading text and the overall letter mix, so a
+    // cap keeps very large blocks (long docs, wide tables) from being rescanned in full.
+    const DIRECTION_SCAN_LIMIT = 4000;
 
     /**
      * Check if a character is RTL
      */
     function isRTLChar(char) {
-        const code = char.charCodeAt(0);
-        return RTL_RANGES.some(range => code >= range.start && code <= range.end);
+        return RTL_CHAR_RE.test(char);
     }
 
     /**
@@ -136,12 +153,7 @@
      */
     function containsRTL(text) {
         if (!text) return false;
-        for (let i = 0; i < text.length; i++) {
-            if (isRTLChar(text[i])) {
-                return true;
-            }
-        }
-        return false;
+        return RTL_CHAR_RE.test(text);
     }
 
     /**
@@ -160,8 +172,11 @@
      */
     function shouldBeRTLText(text) {
         if (!text) return false;
-        const trimmed = text.trim();
+        let trimmed = text.trim();
         if (!trimmed) return false;
+        if (trimmed.length > DIRECTION_SCAN_LIMIT) {
+            trimmed = trimmed.slice(0, DIRECTION_SCAN_LIMIT);
+        }
 
         let firstStrongIsRTL = null;
         let rtlCount = 0;
@@ -171,7 +186,7 @@
             if (isRTLChar(char)) {
                 rtlCount++;
                 if (firstStrongIsRTL === null) firstStrongIsRTL = true;
-            } else if (/\p{L}/u.test(char)) {
+            } else if (LETTER_RE.test(char)) {
                 ltrCount++;
                 if (firstStrongIsRTL === null) firstStrongIsRTL = false;
             }
@@ -454,31 +469,50 @@
                 unicode-bidi: normal !important;
             }
 
-            /* Markdown document / preview tables (Cursor streamdown, VS Code preview) */
-            .markdown-root table[data-rtl-table="true"],
-            .markdown-body table[data-rtl-table="true"] {
+            /* Chat markdown tables — flagged by applyTableRTL() */
+            .markdown-root table[data-rtl-table="true"] {
                 direction: rtl !important;
                 text-align: right !important;
             }
             .markdown-root table[data-rtl-table="true"] th,
-            .markdown-root table[data-rtl-table="true"] td,
-            .markdown-body table[data-rtl-table="true"] th,
-            .markdown-body table[data-rtl-table="true"] td {
+            .markdown-root table[data-rtl-table="true"] td {
                 direction: rtl !important;
                 text-align: right !important;
                 unicode-bidi: isolate !important;
             }
-            .markdown-root table[data-rtl-table="true"] [data-streamdown],
-            .markdown-body table[data-rtl-table="true"] [data-streamdown] {
+            .markdown-root table[data-rtl-table="true"] [data-streamdown] {
                 unicode-bidi: normal !important;
             }
             .markdown-root table[data-rtl-table="true"] pre,
-            .markdown-root table[data-rtl-table="true"] code,
-            .markdown-body table[data-rtl-table="true"] pre,
-            .markdown-body table[data-rtl-table="true"] code {
+            .markdown-root table[data-rtl-table="true"] code {
                 direction: ltr !important;
                 text-align: left !important;
                 unicode-bidi: embed !important;
+            }
+
+            /* Markdown document editor / preview tables — styled by CSS only, never JS.
+               These surfaces are ProseMirror-backed: it re-parses the DOM whenever it
+               sees an external mutation, so writing inline styles / attributes / RLM
+               marks here starts a parse-render loop that blocks the renderer for tens
+               of seconds on large documents. plaintext lets the browser resolve each
+               cell's direction from its own first strong character instead. */
+            .markdown-editor-react table th,
+            .markdown-editor-react table td,
+            .ui-rich-text-editor[data-variant="document"] table th,
+            .ui-rich-text-editor[data-variant="document"] table td,
+            .markdown-preview table th,
+            .markdown-preview table td,
+            .editor-container .markdown-body table th,
+            .editor-container .markdown-body table td {
+                unicode-bidi: plaintext !important;
+                text-align: start !important;
+            }
+            .markdown-editor-react table code,
+            .ui-rich-text-editor[data-variant="document"] table code,
+            .markdown-preview table code,
+            .editor-container .markdown-body table code {
+                unicode-bidi: embed !important;
+                direction: ltr !important;
             }
 
             /* Codex composer */
@@ -1915,6 +1949,11 @@
     function applyTableRTL(table) {
         const text = table.textContent || '';
         const hasRTL = containsRTL(text);
+        const wasRTL = table.getAttribute('data-rtl-table') === 'true';
+
+        // Nothing to do unless the state changed or a re-render stripped our styles.
+        if (hasRTL && wasRTL && table.style.direction === 'rtl') return;
+        if (!hasRTL && !wasRTL) return;
 
         if (!hasRTL) {
             if (table.getAttribute('data-rtl-table') === 'true') {
@@ -1949,17 +1988,6 @@
             code.style.direction = 'ltr';
             code.style.textAlign = 'left';
             code.style.unicodeBidi = 'embed';
-        });
-    }
-
-    /**
-     * Lightweight RTL pass for Markdown document editor / preview only.
-     * The full processElements() skips these zones to avoid preview freezes;
-     * tables are few and cheap to style.
-     */
-    function processMarkdownDocumentTables() {
-        document.querySelectorAll(SKIP_RTL_ZONE_SELECTOR).forEach(root => {
-            root.querySelectorAll('table').forEach(applyTableRTL);
         });
     }
 
@@ -2259,9 +2287,6 @@
         // Cursor user messages — conditionally RTL based on content
         processCursorUserMessages();
 
-        // Markdown document / preview tables (skipped by isInsideEditorArea above)
-        processMarkdownDocumentTables();
-
         // Ensure all code blocks are LTR (run after RTL processing)
         ensureCodeBlocksLTR();
 
@@ -2285,18 +2310,10 @@
             let hasTextChanges = false;
 
             mutations.forEach((mutation) => {
-                // Ignore mutations originating inside the editor area
-                // Markdown document editor / preview — see SKIP_RTL_ZONE_SELECTOR
-                // from doing expensive work for every preview re-render.
-                if (isInsideEditorArea(mutation.target)) {
-                    mutation.addedNodes.forEach((node) => {
-                        if (node.nodeType === 1) {
-                            if (node.tagName === 'TABLE') applyTableRTL(node);
-                            else node.querySelectorAll('table').forEach(applyTableRTL);
-                        }
-                    });
-                    return;
-                }
+                // Markdown document editor / preview — see SKIP_RTL_ZONE_SELECTOR.
+                // Never react to these: ProseMirror re-renders constantly, and
+                // answering each render with DOM writes deadlocks the renderer.
+                if (isInsideEditorArea(mutation.target)) return;
 
                 if (mutation.addedNodes.length > 0) {
                     hasNewNodes = true;
@@ -2304,11 +2321,7 @@
                         if (node.nodeType === 1) { // Element node
                             // Skip nodes inserted into the editor area (e.g.
                             // Markdown Preview rendering its content)
-                            if (isInsideEditorArea(node)) {
-                                if (node.tagName === 'TABLE') applyTableRTL(node);
-                                else node.querySelectorAll('table').forEach(applyTableRTL);
-                                return;
-                            }
+                            if (isInsideEditorArea(node)) return;
 
                             // Immediately handle code blocks
                             if (node.tagName === 'PRE' || node.tagName === 'CODE' ||

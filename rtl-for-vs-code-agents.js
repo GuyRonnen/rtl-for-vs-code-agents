@@ -1927,16 +1927,41 @@
     }
 
     /**
+     * Answer bubble inside a completed "Ask Question" transcript card
+     * ([data-testid="agent-transcript-ask-question-card"]). Cursor renders this
+     * as a plain `<div><span>text</span></div>` sibling of the question's
+     * .markdown-root wrapper — it carries no semantic class, only hashed
+     * build-time utility classes (e.g. "ui-1wd3ewq") that differ across Cursor
+     * releases and can't be selected directly. The testid and the DOM depth
+     * relative to it are the only stable anchors, so we walk from there and
+     * exclude the question wrapper by its .markdown-root descendant.
+     */
+    function getAskQuestionAnswerBubbles() {
+        const bubbles = [];
+        document.querySelectorAll('[data-testid="agent-transcript-ask-question-card"]').forEach(card => {
+            card.querySelectorAll(':scope > div > div > div').forEach(div => {
+                if (div.classList.contains('markdown-root') || div.querySelector('.markdown-root')) return;
+                bubbles.push(div);
+            });
+        });
+        return bubbles;
+    }
+
+    /**
      * Cursor — conditionally apply RTL to user-side bubbles based on content.
      * Targets:
      *   .composer-human-message-content — regular user message bubbles
      *   .composer-questionnaire-toolbar — inline questionnaire / choice toolbar
+     *   .user-questionnaire-answer-text — questionnaire answer bubble text
+     *   getAskQuestionAnswerBubbles() — answer bubble in a completed ask-question
+     *     transcript card (see comment above)
      * These don't go through processChildrenForRTL because they don't have
      * .markdown-root, so we flag them directly: Hebrew/Arabic flips to RTL,
      * English stays LTR.
      */
     function processCursorUserMessages() {
-        document.querySelectorAll('.composer-human-message-content, .composer-questionnaire-toolbar, .user-questionnaire-answer-text').forEach(el => {
+        const elements = document.querySelectorAll('.composer-human-message-content, .composer-questionnaire-toolbar, .user-questionnaire-answer-text');
+        [...elements, ...getAskQuestionAnswerBubbles()].forEach(el => {
             const text = el.textContent || '';
             const hasRTL = shouldBeRTLText(text);
             const wasRTL = el.getAttribute('data-rtl-applied') === 'true';

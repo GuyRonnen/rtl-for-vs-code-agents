@@ -179,10 +179,21 @@
             return '';
         }
 
-        // Check direct text nodes
+        // Skip visually-hidden screen-reader elements (Claude Code 2.1.24x renders an
+        // invisible "You: <message>" h3 heading as the first child of user messages).
+        // Its "You: " prefix breaks first-strong-char detection, and the RLM we inject
+        // into it poisons every subsequent detection pass (RLM-only text node → "not RTL"
+        // → removeRTL). Detection must be based on the real, visible message text.
+        if (element.matches && element.matches('[class*="visuallyHidden"], [class*="screenReaderTurnHeading"]')) {
+            return '';
+        }
+
+        // Check direct text nodes.
+        // Strip BiDi control marks (LRM/RLM/ALM) before testing for content — injectRLM()
+        // creates marks-only text nodes that must not be mistaken for real text.
         for (const node of element.childNodes) {
             if (node.nodeType === Node.TEXT_NODE) {
-                const text = node.textContent.trim();
+                const text = node.textContent.replace(/[\u200e\u200f\u061c]/g, '').trim();
                 if (text) return text;
             }
         }

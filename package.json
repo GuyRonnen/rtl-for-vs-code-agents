@@ -2,7 +2,7 @@
   "name": "rtl-for-vs-code-agents",
   "displayName": "RTL for VS Code Agents",
   "description": "Right-to-left (RTL) support for AI chat agents: Claude Code, Codex (ChatGPT), Copilot, Gemini, Antigravity.",
-  "version": "10.2.0",
+  "version": "10.3.0",
   "publisher": "local",
   "license": "GPL-3.0",
   "repository": {
@@ -86,9 +86,9 @@
         },
         "rtlForVsCodeAgents.updateCheckIntervalHours": {
           "type": "number",
-          "default": 24,
+          "default": 5,
           "minimum": 0,
-          "description": "How often to check for updates (in hours). 0 = check on startup only."
+          "description": "How often to check for updates on GitHub (in hours). When an update is found, the status bar indicator blinks and shows \"Update available\". 0 = check on startup only."
         }
       }
     }

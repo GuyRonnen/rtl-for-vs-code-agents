@@ -10,6 +10,10 @@ Automatically detects Hebrew, Arabic, Persian, and other RTL languages and appli
 
 ### NEW
 
+* **Claude Code 2.1.241 compatibility fix** — user messages stopped right-aligning after Claude Code's August 2026 update, which adds a hidden "You: …" screen-reader heading to every user message. RTL detection now skips hidden screen-reader elements and ignores BiDi control marks, so Hebrew/RTL messages — including ones full of English code identifiers — align right again and stay that way.
+
+* **Blinking update indicator** — when a newer version is found on GitHub, the RTL status bar item blinks and shows **Update available**; click it to update. Update checks now run automatically every 5 hours by default (configurable via the `Update Check Interval Hours` setting).
+
 * **User message layout controls** — two new settings for Claude Code. **Collapsed User Message Lines** (default 3, range 3-8) sets how many lines a long user message shows before "Show more". **Sticky User Message** (off by default) toggles Claude Code's built-in pin-to-top of the latest user message — turning it off lets the message scroll away, freeing screen space to read the agent's reply on shorter screens.
 
 * **Search in conversation 🔍** — click the 🔍 button in the footer to open a search bar. Finds your query across all user and agent messages, highlights every match in-place with a yellow/orange marker, and lets you jump between matches with ↑/↓ or Enter / Shift+Enter. Case-insensitive. Close with × or Esc.
@@ -31,7 +35,7 @@ Automatically detects Hebrew, Arabic, Persian, and other RTL languages and appli
 
 * **User message accent borders** — coral border on user messages in Claude Code and Copilot Chat
 
-* **Check for updates** - Any RTL issues? Click the RTL status bar button to check for updates! Also - The extension checks for updates every time you restart VS CODE.
+* **Check for updates** - Any RTL issues? Click the RTL status bar button to check for updates! The extension also checks automatically on startup and every 5 hours (configurable). When an update is available, the status bar indicator blinks and shows **Update available**.
   ![Check for updates](ReadmeImages/CheckForUpdates.png)
 
 * **Conversation History RTL** — session titles in the history dropdown align right for RTL content, with a wider and taller dropdown
@@ -75,7 +79,8 @@ Session titles in the chat history dropdown now align right for RTL content. The
 ### Check for updates
 
 Any RTL issues? Click the RTL status bar button to check for updates!
-Also - The extension checks for updates every time you restart VS CODE.
+The extension also checks automatically on startup and every 5 hours (configurable via `Update Check Interval Hours`).
+When an update is available, the status bar indicator blinks and shows **Update available** — click it to update.
 
 ![1.00](ReadmeImages/CheckForUpdates.png)
 
@@ -184,6 +189,12 @@ powershell -ExecutionPolicy Bypass -File .\diagnose-rtl.ps1
 </details>
 <details>
 <summary>Changelog</summary>
+
+### v10.3.0
+
+* **Fix: user messages lost RTL alignment after Claude Code 2.1.241 (Aug 2026):** Claude Code now renders an invisible screen-reader heading ("You: …") as the first child of every user message. The RLM direction mark injected into it poisoned the next detection pass — the marks-only text node was read as the "first text", contained no letters, and RTL was removed and tracking lost, leaving Hebrew messages stuck left-aligned. Detection now skips visually-hidden screen-reader elements and strips BiDi control marks (LRM/RLM/ALM) from text nodes, restoring stable right alignment. Bonus: detection reads the real message text again (not the "You: " prefix), so Hebrew messages full of English code identifiers also align right via the first-strong-char rule.
+* **Blinking update indicator:** when a newer release is found on GitHub, the status bar shows `RTL: Update available (vX.Y.Z)` and blinks its warning background until updated.
+* **Faster update cadence:** periodic update checks now default to every 5 hours (was 24). Configurable via `Update Check Interval Hours`; 0 = startup only.
 
 ### v10.2.0
 

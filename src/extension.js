@@ -689,13 +689,36 @@ async function removeAllInjections(context) {
     }
 }
 
+let updateBlinkTimer;
+
+function startUpdateBlink() {
+    if (updateBlinkTimer) return; // already blinking
+    let highlighted = false;
+    updateBlinkTimer = setInterval(() => {
+        if (!statusBarItem) return;
+        highlighted = !highlighted;
+        statusBarItem.backgroundColor = highlighted
+            ? new vscode.ThemeColor('statusBarItem.warningBackground')
+            : undefined;
+    }, 900);
+}
+
+function stopUpdateBlink() {
+    if (updateBlinkTimer) {
+        clearInterval(updateBlinkTimer);
+        updateBlinkTimer = undefined;
+    }
+}
+
 function updateStatusBar(localVersion, remoteVersion) {
     if (!statusBarItem) return;
     if (remoteVersion && isNewerVersion(remoteVersion, localVersion)) {
-        statusBarItem.text = `$(cloud-download) RTL v${localVersion} → v${remoteVersion}`;
-        statusBarItem.tooltip = `RTL for VS Code Agents: Update available (v${remoteVersion}). Click to update.`;
+        statusBarItem.text = `$(cloud-download) RTL: Update available (v${remoteVersion})`;
+        statusBarItem.tooltip = `RTL for VS Code Agents: Update available — v${localVersion} → v${remoteVersion}. Click to update.`;
         statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+        startUpdateBlink();
     } else {
+        stopUpdateBlink();
         statusBarItem.text = `RTL v${localVersion}`;
         statusBarItem.tooltip = 'RTL for VS Code Agents: Click to check for updates';
         statusBarItem.backgroundColor = undefined;
@@ -713,7 +736,7 @@ async function checkForUpdates(context, options = {}) {
 
     // Respect check interval only for periodic (setInterval) checks, not startup
     if (isPeriodicCheck) {
-        const hours = Number(config.get('updateCheckIntervalHours', 24)) || 24;
+        const hours = Number(config.get('updateCheckIntervalHours', 5)) || 5;
         const lastCheck = context.globalState.get('rtlForVsCodeAgents.lastUpdateCheck', 0);
         const elapsed = (Date.now() - lastCheck) / (1000 * 60 * 60);
         if (hours > 0 && elapsed < hours) {
@@ -856,7 +879,7 @@ function scheduleUpdateCheck(context) {
     const config = getConfig();
     if (!config.get('autoCheckUpdates', true)) return;
 
-    const hours = Number(config.get('updateCheckIntervalHours', 24)) || 24;
+    const hours = Number(config.get('updateCheckIntervalHours', 5)) || 5;
     if (hours <= 0) return;
 
     const intervalMs = hours * 60 * 60 * 1000;
@@ -874,6 +897,7 @@ function createStatusBarItem(context) {
     updateStatusBar(localVersion, null);
     statusBarItem.show();
     context.subscriptions.push(statusBarItem);
+    context.subscriptions.push({ dispose: () => stopUpdateBlink() });
 }
 
 async function activate(context) {

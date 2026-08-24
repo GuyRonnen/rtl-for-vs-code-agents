@@ -220,6 +220,19 @@
     }
 
     /**
+     * Set table direction from its header row - dir="rtl" reverses the column order
+     */
+    function processTables(element) {
+        element.querySelectorAll('table').forEach(el => {
+            const row = el.querySelector('tr');
+            const dir = (row && shouldBeRTLText(row.textContent)) ? 'rtl' : 'auto';
+            if (el.getAttribute('dir') !== dir) {
+                el.setAttribute('dir', dir);
+            }
+        });
+    }
+
+    /**
      * Inject an RLM (Right-to-Left Mark) character at the start of an element
      * to anchor BiDi direction when the first child is an inline element with LTR text
      */
@@ -251,7 +264,7 @@
         });
 
         // Apply to paragraphs - check each child independently
-        element.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6').forEach(el => {
+        element.querySelectorAll('p, li, td, th, h1, h2, h3, h4, h5, h6').forEach(el => {
             if (shouldBeRTLText(el.textContent)) {
                 el.style.direction = 'rtl';
                 el.style.textAlign = 'right';
@@ -274,6 +287,9 @@
                 el.style.paddingLeft = '0';
             }
         });
+
+        // Apply to tables
+        processTables(element);
 
         // Keep code blocks LTR (including div.code for Copilot)
         element.querySelectorAll('div.code, pre, code').forEach(el => {
@@ -416,6 +432,15 @@
             [data-rtl-input="true"] + [class*="mentionMirror"] {
                 unicode-bidi: plaintext !important;
             }
+            /* Anchor RTL tables to the right edge and align their cells right */
+            table:dir(rtl) {
+                margin-left: auto !important;
+                margin-right: 0 !important;
+            }
+            table:dir(rtl) :is(th, td) {
+                text-align: right !important;
+            }
+
             /* Maintain code blocks as LTR within RTL containers */
             [data-rtl-applied="true"] pre,
             [data-rtl-applied="true"] pre *,
@@ -1794,7 +1819,7 @@
      */
     function processChildrenForRTL(element) {
         // Process paragraphs, headings, and list items
-        element.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6').forEach(el => {
+        element.querySelectorAll('p, li, td, th, h1, h2, h3, h4, h5, h6').forEach(el => {
             // Skip if already processed and RTL
             if (el.style.direction === 'rtl') {
                 return;
@@ -1828,6 +1853,9 @@
                 el.setAttribute('data-rtl-applied', 'true');
             }
         });
+
+        // Process tables
+        processTables(element);
     }
 
     /**

@@ -372,6 +372,13 @@ powershell -ExecutionPolicy Bypass -File .\diagnose-rtl.ps1
 
 </details>
 
+## Related RTL Projects
+
+Complementary RTL fixes for AI coding agents on surfaces this extension does not cover:
+
+- **[kivun-terminal-wsl](https://github.com/noambrand/kivun-terminal-wsl)** — terminal-layer RTL fix for Claude Code TUI on Windows (WSL2 + Konsole) and Linux, with a BiDi output wrapper for mixed Hebrew/Arabic + LTR code.
+- **[Claude-for-Office-RTL-fix](https://github.com/asaf-aizone/Claude-for-Office-RTL-fix)** — client-side RTL fix for Claude's Microsoft Office add-in (Word, Excel, PowerPoint) on Windows.
+
 ## Credits
 
 The **YOLO Mode** feature (auto-approve with countdown) is based on the original idea and JavaScript snippet by [Chris Le](https://github.com/chrisle) — see the [original gist](https://gist.github.com/chrisle/c6f187278e27f0168d982cd84de08b92).
